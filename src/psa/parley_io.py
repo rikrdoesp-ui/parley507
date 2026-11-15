@@ -84,6 +84,46 @@ def cargar_referencias(con, fecha: str, plantilla: pd.DataFrame) -> tuple[int, l
     return len(filas), avisos
 
 
+def parsear_lineas(texto: str) -> list[dict]:
+    """`#AWAY@HOME` y renglones `Jugador|mercado linea sobre debajo;...` (formato de `ranking` de /parley)."""
+    salida, partido = [], ""
+    for renglon in texto.splitlines():
+        renglon = renglon.strip()
+        if renglon.startswith("#"):
+            partido = renglon[1:]
+        elif "|" in renglon:
+            nombre, resto = renglon.split("|", 1)
+            for item in resto.split(";"):
+                partes = item.split()
+                if len(partes) == 4:
+                    salida.append({"partido": partido, "jugador": nombre.strip(), "mercado": partes[0].lower(),
+                                   "linea": float(partes[1]), "sobre": odds.a_decimal(partes[2]),
+                                   "debajo": odds.a_decimal(partes[3])})
+    return salida
+
+
+def cargar_lineas_stake(con, fecha: str, plantilla: pd.DataFrame) -> tuple[int, list[str]]:
+    """Guarda en player_props las líneas de Stake que /parley leyó (lineas/FECHA.txt). Son precio real: tienen VE."""
+    ruta = config.STAKE / "lineas" / f"{fecha}.txt"
+    if not ruta.exists():
+        return 0, []
+    captura = datetime.fromtimestamp(ruta.stat().st_mtime).astimezone().isoformat(timespec="seconds")
+    avisos, filas = [], []
+    for r in parsear_lineas(ruta.read_text(encoding="utf-8")):
+        if r["mercado"] not in config.MERCADOS_NBA:
+            continue
+        equipos = equipos_partido(r["partido"]) if r["partido"] else set(plantilla.equipo)
+        pid = resolver_jugador(r["jugador"], plantilla[plantilla.equipo.isin(equipos)])
+        if pid is None:
+            avisos.append(f"{r['jugador']} ({r['partido']}): no se pudo identificar en la plantilla.")
+        filas.append((fecha, r["partido"], pid, r["jugador"], r["mercado"], r["linea"], r["sobre"], r["debajo"],
+                      "Stake", captura, f"{ruta.name} {captura}"))
+    con.executemany("""INSERT OR IGNORE INTO player_props(game_date, matchup, player_id, player_name, market, line,
+                       over_odds, under_odds, bookmaker, captured_at, entry_method, source_ref)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'PARLEY_REF', ?)""", filas)
+    return len(filas), avisos
+
+
 def exportar(df: pd.DataFrame, fecha: str) -> Path:
     """Escribe CODE/stake/proyecciones/FECHA.json con P(over) en las líneas x.5 cercanas a la media."""
     jugadores = []

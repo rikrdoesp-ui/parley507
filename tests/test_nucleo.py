@@ -80,9 +80,16 @@ def test_redistribuir_reparte_y_respeta_tope():
     nuevos = modelo.redistribuir({1: 10, 2: 30, 3: 20, 4: 5}, {1})
     assert 1 not in nuevos
     assert nuevos[4] == 5  # Fuera de la rotación no recibe minutos.
-    assert nuevos[2] == pytest.approx(30 + 10 * 10 / 30)  # Margen 10 de 30 hasta el tope.
-    assert nuevos[3] == pytest.approx(20 + 10 * 20 / 30)  # El de menos minutos recibe más.
+    assert nuevos[2] == pytest.approx(30 + 10 * 30 / 50)
+    assert nuevos[3] == pytest.approx(20 + 10 * 20 / 50)
     assert modelo.redistribuir({1: 40, 2: 38}, {1})[2] == modelo.TOPE_MINUTOS
+
+
+def test_redistribuir_no_infla_a_un_suplente():
+    # Tres bajas que liberan 90 minutos: nadie gana más del máximo, aunque sobren minutos.
+    nuevos = modelo.redistribuir({1: 34, 2: 30, 3: 26, 4: 30, 5: 12}, {1, 2, 3})
+    assert nuevos[5] == pytest.approx(12 + modelo.GANANCIA_MAXIMA)
+    assert nuevos[4] == pytest.approx(30 + modelo.GANANCIA_MAXIMA)
 
 
 # --- Lesiones ---------------------------------------------------------------------
@@ -148,6 +155,15 @@ def test_referencia_consenso_y_minimo_de_casas():
     assert len(filas) == 1  # Rebotes solo tiene 2 casas.
     assert filas[0]["p_over"] == pytest.approx(0.5)
     assert parley_io.equipos_partido(filas[0]["partido"]) == {"MIL", "NYK"}
+
+
+def test_lineas_de_stake_con_precio():
+    filas = parley_io.parsear_lineas("#SA@UTAH\nVictor Wembanyama|puntos 27.5 1.82 1.85;rebotes 10.5 -110 +100\n")
+    assert [f["mercado"] for f in filas] == ["puntos", "rebotes"]
+    assert filas[1]["sobre"] == pytest.approx(1 + 100 / 110) and filas[1]["debajo"] == 2.0
+    assert parley_io.equipos_partido(filas[0]["partido"]) == {"SAS", "UTA"}
+    from psa.nba import props
+    assert props.es_consenso("Consenso BettingPros sin margen (5 casas)") and not props.es_consenso("Stake")
 
 
 def test_resolver_jugador_abreviado_y_ambiguo():

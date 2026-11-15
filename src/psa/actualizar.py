@@ -77,6 +77,8 @@ def recalcular(con, fecha: str, resumen: dict | None = None) -> dict:
     plantilla = df[["player_id", "jugador", "equipo"]].drop_duplicates()
     resumen["lineas_parley"], avisos = parley_io.cargar_referencias(con, fecha, plantilla)
     resumen["avisos"] += avisos
+    resumen["lineas_stake"], avisos = parley_io.cargar_lineas_stake(con, fecha, plantilla)
+    resumen["avisos"] += avisos
     resumen["export"] = str(parley_io.exportar(df, fecha))
     con.commit()
     return resumen

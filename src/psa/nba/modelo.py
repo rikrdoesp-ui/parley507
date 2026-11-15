@@ -18,6 +18,7 @@ VIDA_TASA = 12
 MUESTRA_MINIMA = 5
 K_DEFECTO = {"points": 8.0, "rebounds": 6.0, "assists": 4.0}  # Solo si nunca se corrió el ajuste.
 TOPE_MINUTOS = 40.0
+GANANCIA_MAXIMA = 8.0  # Minutos extra máximos por jugador cuando falta un compañero.
 
 
 def _por_jugador(serie: pd.Series, jugador: pd.Series, funcion) -> pd.Series:
@@ -84,15 +85,18 @@ def lineas_cercanas(mu: float, k: float) -> list[float]:
 
 
 def redistribuir(minutos: dict, fuera: set, tope: float = TOPE_MINUTOS) -> dict:
-    """Reparte los minutos de los que no juegan entre la rotación (>= 10 min), según el margen de cada uno hasta
-    el tope: el suplente de 20 min recibe más que la estrella de 36, como suele pasar.
+    """Reparte los minutos de los que no juegan entre la rotación (>= 10 min), en proporción a sus minutos y con
+    un máximo de GANANCIA_MAXIMA por jugador.
 
     Heurística v0.1: no cambia la tasa por minuto de nadie (sin efecto de uso) y nadie pasa del tope.
     """
     libres = sum(m for j, m in minutos.items() if j in fuera)
     quedan = {j: m for j, m in minutos.items() if j not in fuera}
-    margen = {j: tope - m for j, m in quedan.items() if 10 <= m < tope}
-    total = sum(margen.values())
+    rotacion = {j: m for j, m in quedan.items() if m >= 10}
+    total = sum(rotacion.values())
     if not libres or not total:
         return quedan
-    return {j: min(tope, m + libres * margen[j] / total) if j in margen else m for j, m in quedan.items()}
+    # Proporcional a los minutos, con tope de ganancia: los minutos que sobran quedan sin asignar antes que
+    # inflar a un suplente (un margen grande no significa que el técnico le vaya a dar 25 minutos más).
+    return {j: min(tope, m + min(GANANCIA_MAXIMA, libres * m / total)) if j in rotacion else m
+            for j, m in quedan.items()}

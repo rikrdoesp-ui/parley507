@@ -85,7 +85,7 @@ def datos(con, fecha: str) -> dict:
     lineas = [{k: limpio(v) for k, v in fila.items()} for fila in tabla.to_dict("records")]
     # Línea real por jugador y mercado: la de una casa (manual) manda sobre el consenso de referencia.
     reales = {}
-    for fila in sorted(lineas, key=lambda f: f["origen"] != "PARLEY_REF"):
+    for fila in sorted(lineas, key=lambda f: not props_nba.es_consenso(f["casa"])):
         if fila.get("P over") is not None and fila.get("player_id") is not None:
             reales[(int(fila["player_id"]), fila["mercado"])] = fila
 
@@ -309,7 +309,7 @@ function vistaJuego(nombre) {
       el('span', {class: 'badge ' + (p.tipo === 'real' ? 'real' : '')}, p.tipo === 'real' ? 'línea real' : 'referencia')),
     el('div', {class: 'muted'}, `Modelo ${pct(p.p_lado)} · proy ${num(p.media)} · L10 ${num(p.l10)} · ${p.aciertos[0]}/${p.aciertos[1]}`
       + (p.edge !== undefined && p.edge !== null ? ` · edge +${(p.edge * 100).toFixed(1)}` : '')
-      + (p.cuota && p.origen !== 'PARLEY_REF' ? ` · cuota ${num(p.cuota, 2)}` : '')
+      + (p.cuota && !String(p.casa).startsWith('Consenso') ? ` · cuota ${num(p.cuota, 2)}` : '')
       + (j.est ? ` · ⚠ ${j.est}` : '') + (j.sd > 6 ? ' · ⚠ minutos inestables' : ''))));
   out.push(caja, el('p', {class: 'muted'}, NOTA_LINEA));
   for (const equipo of [...new Set(jug.map(j => j.eq))]) {
@@ -358,7 +358,7 @@ const vistas = {
         el('div', {class: 'muted'}, `${p.casa} · ${num(p.minutos)} min · rango ${p['rango 10-90']}`),
         el('table', {},
           el('tr', {}, el('th', {}, ''), el('th', {}, 'P modelo'), el('th', {}, 'cuota justa'),
-            el('th', {}, p.origen === 'PARLEY_REF' ? 'ref. sin margen' : 'cuota casa'), el('th', {}, 'edge'), el('th', {}, 'VE')),
+            el('th', {}, String(p.casa).startsWith('Consenso') ? 'ref. sin margen' : 'cuota casa'), el('th', {}, 'edge'), el('th', {}, 'VE')),
           ...[['Over', 'over'], ['Under', 'under']].map(([t, k]) => el('tr', {},
             el('td', {}, t), el('td', {}, pct(p['P ' + k])), el('td', {}, num(p['cuota justa ' + k], 2)),
             el('td', {}, num(p['cuota ' + k], 2)), el('td', {class: signo(p['edge ' + k])}, pct(p['edge ' + k])),

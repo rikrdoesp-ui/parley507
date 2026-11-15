@@ -6,6 +6,10 @@ from .. import odds
 from . import modelo
 
 
+def es_consenso(casa: str) -> bool:
+    return str(casa).startswith("Consenso")
+
+
 def evaluar(pred: pd.DataFrame, props: pd.DataFrame, escenario: str = "base") -> pd.DataFrame:
     """Una fila por línea (última captura): probabilidades, cuotas justas, edge y VE, ordenadas por VE y edge."""
     proy = pred[pred.scenario == escenario].set_index(["player_id", "market"])
@@ -26,8 +30,8 @@ def evaluar(pred: pd.DataFrame, props: pd.DataFrame, escenario: str = "base") ->
         pu = float(modelo.p_under(r.projected_mean, r.dispersion, p.line))
         dos_lados = pd.notna(p.over_odds) and pd.notna(p.under_odds)
         p_mercado = odds.sin_margen(p.over_odds, p.under_odds) if dos_lados else np.nan
-        # El consenso de /parley ya viene sin margen: su "cuota" no es un precio apostable, no tiene VE.
-        apostable = p.entry_method != "PARLEY_REF"
+        # El consenso de BettingPros ya viene sin margen: su "cuota" no es un precio apostable, no tiene VE.
+        apostable = not es_consenso(p.bookmaker)
         filas.append({
             **base, "equipo": r.equipo, "media": r.projected_mean,
             "rango 10-90": f"{r.lower_interval:.0f}-{r.upper_interval:.0f}", "minutos": r.minutes,
