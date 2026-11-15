@@ -60,7 +60,7 @@ header{padding:18px 0 10px}
 /* Pestañas: texto, con subrayado grueso en la activa. */
 nav{position:sticky;top:0;z-index:3;background:var(--fondo);border-bottom:1px solid var(--regla)}
 nav .envoltura{display:flex;gap:0;overflow-x:auto;scrollbar-width:none}
-nav button{flex:0 0 auto;border:0;background:none;color:var(--suave);font:600 18px/1 var(--cond);padding:12px 7px 10px;
+nav button{flex:0 0 auto;border:0;background:none;color:var(--suave);font:600 18px/1 var(--cond);padding:15px 7px 12px;min-height:48px;
   border-bottom:3px solid transparent;cursor:pointer}
 nav button[aria-selected=true]{color:var(--tinta);border-bottom-color:var(--tinta)}
 main{padding-top:14px;padding-bottom:48px}
@@ -302,7 +302,8 @@ function vistaJuego(nombre) {
 const vistas = {
   Partidos() {
     if (!D.partidos.length) return [el('p', {class: 'vacio'}, 'No hay partidos NBA este día.')];
-    return [el('div', {}, ...D.partidos.map(p => el('a', {class: 'partido', href: '#juego=' + encodeURIComponent(p.p)},
+    return [el('div', {}, ...D.partidos.map(p => el('a', {class: 'partido', href: '#juego=' + encodeURIComponent(p.p),
+      'aria-label': `${p.p.replace(' @ ', ' visita a ')}, ${p.hora} hora de Panamá`},
       cruce(p.p), reloj(p),
       el('div', {class: 'detalle'}, el('span', {}, `${p.hora} hora de Panamá`), p.marcador ? el('span', {}, `Final ${p.marcador}`) : '',
         p.favorito ? el('span', {}, `Favorito ${p.favorito}`) : '',

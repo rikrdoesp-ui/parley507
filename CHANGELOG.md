@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.12 — 2026-11-15
+
+- Prueba como celular (Android emulado, 375 px, toques): sin desborde, letra mínima 13 px, partidos y apartados
+  plegables de 58 px o más, "atrás" funciona; manifiesto e íconos válidos para instalar en Android e iPhone.
+- Pestañas de 42 a 48 px de alto, como recomiendan Google y Apple para el dedo.
+- Los partidos se leen bien con lector de pantalla ("IND visita a PHI, 13:00 hora de Panamá").
+
 ## v0.1.11 — 2026-11-15
 
 - Las direcciones del ícono de pestaña, el de iPhone y el manifiesto llevan la versión (`?v=`), para que el
