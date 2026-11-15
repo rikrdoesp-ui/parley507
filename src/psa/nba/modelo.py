@@ -84,13 +84,14 @@ def lineas_cercanas(mu: float, k: float) -> list[float]:
     return [x + 0.5 for x in range(int(bajo), int(math.ceil(alto)) + 1)]
 
 
-def redistribuir(minutos: dict, fuera: set, tope: float = TOPE_MINUTOS) -> dict:
+def redistribuir(minutos: dict, fuera: set, tope: float = TOPE_MINUTOS, fraccion: float = 1.0) -> dict:
     """Reparte los minutos de los que no juegan entre la rotación (>= 10 min), en proporción a sus minutos y con
     un máximo de GANANCIA_MAXIMA por jugador.
 
-    Heurística v0.1: no cambia la tasa por minuto de nadie (sin efecto de uso) y nadie pasa del tope.
+    `fraccion`: parte de los minutos libres que se reparte (el resto se lo llevan jugadores fuera de la rotación
+    o ya está en la media reciente). Se elige en el backtest.
     """
-    libres = sum(m for j, m in minutos.items() if j in fuera)
+    libres = fraccion * sum(m for j, m in minutos.items() if j in fuera)
     quedan = {j: m for j, m in minutos.items() if j not in fuera}
     rotacion = {j: m for j, m in quedan.items() if m >= 10}
     total = sum(rotacion.values())
@@ -100,3 +101,30 @@ def redistribuir(minutos: dict, fuera: set, tope: float = TOPE_MINUTOS) -> dict:
     # inflar a un suplente (un margen grande no significa que el técnico le vaya a dar 25 minutos más).
     return {j: min(tope, m + min(GANANCIA_MAXIMA, libres * m / total)) if j in rotacion else m
             for j, m in quedan.items()}
+
+
+TOPE_AUMENTO_USO = 0.35  # Una ausencia no sube la media de un compañero más de un 35 % por uso.
+
+
+def ajustar_ausencias(presentes: dict, ausentes: dict, alfa: float, fraccion: float = 1.0) -> tuple[dict, dict]:
+    """Minutos y medias de los presentes cuando faltan jugadores de rotación.
+
+    presentes: {jugador: (minutos, {stat: tasa por minuto})}; ausentes: {jugador: (minutos, {stat: producción})}.
+    1. Una `fraccion` de los minutos de los ausentes se reparte con `redistribuir`.
+    2. Por estadística, el hueco es la producción de los ausentes que no recuperan esos minutos extra. Una
+       fracción `alfa` del hueco (efecto de uso) va a la rotación en proporción a lo que ya produce cada uno:
+       el que más asiste recibe más asistencias. `alfa` se elige en el backtest; 0 = sin efecto de uso.
+    """
+    minutos = redistribuir({**{p: m for p, (m, _) in presentes.items()}, **{a: m for a, (m, _) in ausentes.items()}},
+                           set(ausentes), fraccion=fraccion)
+    medias = {p: {} for p in presentes}
+    for stat in ESTADISTICAS:
+        base = {p: minutos[p] * t[stat] for p, (_, t) in presentes.items() if t.get(stat) == t.get(stat)}
+        recuperado = sum((minutos[p] - presentes[p][0]) * presentes[p][1][stat] for p in base)
+        hueco = max(0.0, sum(prod.get(stat, 0) or 0 for _, prod in ausentes.values()) - recuperado)
+        rotacion = {p: mu for p, mu in base.items() if minutos[p] >= 10}
+        total = sum(rotacion.values())
+        for p, mu in base.items():
+            extra = alfa * hueco * rotacion[p] / total if p in rotacion and total else 0.0
+            medias[p][stat] = mu + min(extra, TOPE_AUMENTO_USO * mu)
+    return minutos, medias

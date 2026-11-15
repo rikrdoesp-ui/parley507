@@ -7,6 +7,7 @@ proyección usa solo partidos anteriores a ese juego. Mide:
   La línea sintética está etiquetada: no es una línea real de casa.
 - Cobertura del intervalo 10-90 (debería rondar 80 %).
 - Legs reales de /parley: Brier de la app frente a la probabilidad de mercado y la final de /parley.
+- Partidos con ausencias de rotación: elige qué parte de los minutos libres repartir y cuánto efecto de uso aplicar.
 """
 import json
 
@@ -84,6 +85,83 @@ def legs_con_modelo(df: pd.DataFrame, con, ks_por_temporada: dict, k_final: dict
     return pd.DataFrame(filas)
 
 
+# (fracción de minutos repartidos, alfa de uso). (0, 0) = sin ajuste.
+COMBOS = [(f, a) for f in (0.0, 0.25, 0.5, 1.0) for a in (0.0, 0.25, 0.5)]
+MIN_AUSENTE = 15  # Solo cuenta como ausencia un jugador de rotación (15+ min en su último partido).
+
+
+def filas_con_ausencias(df: pd.DataFrame) -> pd.DataFrame:
+    """Reconstruye cada partido histórico en que faltó un jugador de rotación que había jugado en alguno de los 3
+    partidos previos del equipo (y hace 10 días o menos). Por cada presente, guarda la media sin ajustar y la
+    ajustada con cada alfa. Todo con información anterior al partido, salvo saber quién no jugó (que en vivo da el
+    reporte de lesiones).
+    """
+    df = df.sort_values(["player_id", "game_date", "game_id"])
+    jugador = df["player_id"]
+    df["min_ultimo"] = df.groupby("player_id", sort=False)["minutes"].transform(
+        lambda s: s.ewm(halflife=modelo.VIDA_MINUTOS).mean())
+    for stat in modelo.ESTADISTICAS:
+        df[f"prod_{stat}"] = df.groupby("player_id", sort=False)[stat].transform(
+            lambda s: s.rolling(10, min_periods=3).mean())
+    filas = []
+    for _, g in df.sort_values(["game_date", "game_id"]).groupby("team_id", sort=False):
+        ultimo, previos = {}, []
+        for juego, filas_juego in g.groupby("game_id", sort=False):
+            fecha = pd.Timestamp(filas_juego.game_date.iloc[0])
+            presentes = set(filas_juego.player_id)
+            ausentes = {p for p in set().union(*previos[-3:]) - presentes if p in ultimo
+                        and ultimo[p][1] >= MIN_AUSENTE and (fecha - ultimo[p][0]).days <= 10} if previos else set()
+            validos = filas_juego.dropna(subset=["min_proy"] + [f"tasa_{s}" for s in modelo.ESTADISTICAS])
+            if ausentes and not validos.empty:
+                pres = {r.player_id: (r.min_proy, {s: getattr(r, f"tasa_{s}") for s in modelo.ESTADISTICAS})
+                        for r in validos.itertuples()}
+                aus = {p: (ultimo[p][1], ultimo[p][2]) for p in ausentes}
+                ajustes = {c: modelo.ajustar_ausencias(pres, aus, c[1], c[0]) for c in COMBOS}
+                for r in validos.itertuples():
+                    fila = {"season": r.season, "minutes": r.minutes,
+                            **{f"min_{f}": ajustes[(f, 0.0)][0][r.player_id] for f, a in COMBOS if a == 0.0}}
+                    for s in modelo.ESTADISTICAS:
+                        fila.update({s: getattr(r, s), f"l10_{s}": getattr(r, f"l10_{s}"), f"mu_base_{s}": getattr(r, f"mu_{s}")})
+                        for c in COMBOS:
+                            fila[f"mu_{c[0]}_{c[1]}_{s}"] = ajustes[c][1][r.player_id][s]
+                    filas.append(fila)
+            for r in filas_juego.itertuples():
+                ultimo[r.player_id] = (fecha, r.min_ultimo, {s: getattr(r, f"prod_{s}") for s in modelo.ESTADISTICAS})
+            previos.append(presentes)
+    return pd.DataFrame(filas)
+
+
+def evaluar_ausencias(df: pd.DataFrame, ks: dict) -> dict:
+    """Error de minutos y de medias, y Brier en línea sintética, sin ajuste y con cada alfa, por temporada."""
+    filas = filas_con_ausencias(df)
+    salida = {}
+    for temporada, f in filas.groupby("season"):
+        if temporada not in ks:
+            continue
+        m = {"n_jugador_partido": int(len(f)),
+             "mae_minutos": {str(fr): round(float((f.minutes - f[f"min_{fr}"]).abs().mean()), 3)
+                             for fr, a in COMBOS if a == 0.0}}
+        for s in modelo.ESTADISTICAS:
+            d = f.dropna(subset=[f"l10_{s}", f"mu_base_{s}"])
+            linea = np.floor(d[f"l10_{s}"].to_numpy()) + 0.5
+            sobre = (d[s].to_numpy() > linea).astype(float)
+            m[s] = {}
+            for c in COMBOS:
+                mu = d[f"mu_{c[0]}_{c[1]}_{s}"]
+                m[s][f"{c[0]}_{c[1]}"] = {"mae": round(float((d[s] - mu).abs().mean()), 3),
+                                          "brier": round(brier(modelo.p_over(mu, ks[temporada][s], linea), sobre), 4)}
+        salida[temporada] = m
+    return salida
+
+
+def elegir_combo(ausencias: dict) -> tuple[float, float]:
+    """(fracción, alfa) con menor Brier medio en la primera temporada de prueba; la segunda queda como confirmación."""
+    if not ausencias:
+        return 0.0, 0.0
+    primera = ausencias[min(ausencias)]
+    return min(COMBOS, key=lambda c: sum(primera[s][f"{c[0]}_{c[1]}"]["brier"] for s in modelo.ESTADISTICAS))
+
+
 def correr(con) -> dict:
     df = modelo.con_proyeccion(historial(con))
     temporadas = sorted(df.season.unique())
@@ -95,6 +173,8 @@ def correr(con) -> dict:
     # La k que usan las proyecciones del día se ajusta con todo lo disponible.
     k_final = {s: modelo.ajustar_k(d[f"mu_{s}"].to_numpy(), d[s].to_numpy())
                for s in modelo.ESTADISTICAS for d in [df.dropna(subset=[f"mu_{s}"])]}
+    ausencias = evaluar_ausencias(df, ks)
+    fraccion, alfa = elegir_combo(ausencias)
     legs = legs_con_modelo(df, con, ks, k_final)
     reales = {}
     if not legs.empty:
@@ -107,12 +187,13 @@ def correr(con) -> dict:
                   "comparables_brier_mercado": round(brier(comunes.p_mercado, comunes.acierto), 4) if len(comunes) else None,
                   "comparables_brier_parley": round(brier(comunes.p_final, comunes.acierto), 4) if len(comunes) else None,
                   "muestra_suficiente": bool(len(comunes) >= 100)}
-    resultado = {"metricas": metricas, "legs_reales": reales, "k_final": {s: round(v, 3) for s, v in k_final.items()}}
+    resultado = {"metricas": metricas, "legs_reales": reales, "k_final": {s: round(v, 3) for s, v in k_final.items()},
+                 "ausencias": ausencias, "fraccion_minutos": fraccion, "alfa_uso": alfa}
     con.execute("INSERT INTO model_runs(sport, model_version, training_cutoff, params_json, metrics_json, created_at)"
                 " VALUES ('NBA', ?, ?, ?, ?, ?)",
                 (config.MODELO_NBA, str(df.game_date.max()),
                  json.dumps({"k": k_final, "vida_minutos": modelo.VIDA_MINUTOS, "vida_tasa": modelo.VIDA_TASA,
-                             "muestra_minima": modelo.MUESTRA_MINIMA}),
+                             "muestra_minima": modelo.MUESTRA_MINIMA, "fraccion_minutos": fraccion, "alfa_uso": alfa}),
                  json.dumps(resultado), db.ahora_utc()))
     con.commit()
     resultado["calibracion"] = pd.concat(calibraciones, ignore_index=True) if calibraciones else pd.DataFrame()
@@ -125,4 +206,5 @@ def main() -> None:
     sys.stdout.reconfigure(encoding="utf-8")
     with db.conectar() as con:
         r = correr(con)
-    print(json.dumps({k: r[k] for k in ("metricas", "legs_reales", "k_final")}, indent=1, ensure_ascii=False))
+    print(json.dumps({k: r[k] for k in ("metricas", "legs_reales", "k_final", "fraccion_minutos", "alfa_uso")},
+                     indent=1, ensure_ascii=False))

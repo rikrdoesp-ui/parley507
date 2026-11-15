@@ -85,6 +85,20 @@ def test_redistribuir_reparte_y_respeta_tope():
     assert modelo.redistribuir({1: 40, 2: 38}, {1})[2] == modelo.TOPE_MINUTOS
 
 
+def test_efecto_de_uso_va_al_que_mas_produce_y_tiene_tope():
+    presentes = {1: (30, {"points": 0.6, "rebounds": 0.2, "assists": 0.25}),
+                 2: (30, {"points": 0.4, "rebounds": 0.3, "assists": 0.05})}
+    ausente = {9: (34, {"points": 24, "rebounds": 5, "assists": 7})}
+    mins, sin = modelo.ajustar_ausencias(presentes, ausente, alfa=0.0, fraccion=0.0)
+    assert mins == {1: 30, 2: 30} and sin[1]["assists"] == pytest.approx(7.5)  # Sin ajuste: igual que antes.
+    _, con = modelo.ajustar_ausencias(presentes, ausente, alfa=0.25, fraccion=0.0)
+    ganancia = {p: con[p]["assists"] - sin[p]["assists"] for p in (1, 2)}
+    assert ganancia[1] > ganancia[2] > 0  # El que más asiste se lleva más asistencias.
+    assert ganancia[1] + ganancia[2] == pytest.approx(0.25 * 7)
+    _, todo = modelo.ajustar_ausencias(presentes, ausente, alfa=1.0, fraccion=0.0)
+    assert todo[1]["points"] <= sin[1]["points"] * (1 + modelo.TOPE_AUMENTO_USO) + 1e-9
+
+
 def test_redistribuir_no_infla_a_un_suplente():
     # Tres bajas que liberan 90 minutos: nadie gana más del máximo, aunque sobren minutos.
     nuevos = modelo.redistribuir({1: 34, 2: 30, 3: 26, 4: 30, 5: 12}, {1, 2, 3})

@@ -71,11 +71,14 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
 2. **Tasa:** estadística por minuto, media exponencial más larga (vida media 12 partidos).
 3. **Media:** minutos × tasa. **Distribución:** binomial negativa; su dispersión `k` se ajusta en el backtest con
    datos anteriores al periodo evaluado.
-4. **Lesiones:** Out no juega; los minutos de una baja nueva se reparten en la rotación en proporción a sus minutos
-   (tope 40). Questionable/Doubtful: escenario base "juega" y un escenario "sin X" para sus compañeros.
+4. **Bajas (efecto de uso):** Out no juega. Por cada baja nueva de rotación, sus compañeros reciben una parte de la
+   producción que deja (alfa) en proporción a lo que ya producen, y opcionalmente una fracción de sus minutos. Ambos
+   valores los elige el backtest con los partidos históricos en que faltó alguien: hoy fracción de minutos 0 y alfa
+   0.25 (repartir todos los minutos empeoraba el error). Tope: +35 % de la media por uso, +8 minutos, 40 minutos.
+   Questionable/Doubtful: escenario base "juega" y un escenario "sin X" para sus compañeros.
 5. Menos de 5 partidos previos = "muestra insuficiente", sin proyección.
 
-Limitaciones conocidas: no modela efecto de uso al faltar un compañero, rival, ritmo, descanso, blowout ni cambios
+Limitaciones conocidas: el efecto de uso es un promedio y se queda corto cuando faltan varios del mismo puesto; no modela rival, ritmo, descanso, blowout ni cambios
 de equipo; la titularidad histórica es desconocida (NULL). Solo temporada regular: en playoffs no hay box scores
 nuevos, así que desde la segunda ronda no habrá proyecciones hasta añadir ese tipo de temporada.
 

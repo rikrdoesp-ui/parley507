@@ -25,6 +25,14 @@ def k_vigente(con) -> tuple[dict, str]:
     return json.loads(fila[0])["k"], f"dispersión ajustada en el backtest del {fila[1][:10]}"
 
 
+def ajuste_ausencias_vigente(con) -> tuple[float, float]:
+    """(fracción de minutos repartidos, alfa de uso) elegidos en el último backtest; sin backtest, sin ajuste."""
+    fila = con.execute("SELECT params_json FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1",
+                       (config.MODELO_NBA,)).fetchone()
+    params = json.loads(fila[0]) if fila else {}
+    return params.get("fraccion_minutos", 0.0), params.get("alfa_uso", 0.0)
+
+
 def proyectar_dia(con, fecha: str) -> pd.DataFrame:
     juegos = pd.read_sql("""SELECT g.game_id, g.start_time_utc, g.status, g.home_team_id, g.away_team_id,
                               h.abbreviation AS local, a.abbreviation AS visita
@@ -68,25 +76,43 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
         "SELECT player_id, minutes, reason FROM minutes_overrides WHERE game_date = ?", (fecha,))}
 
     k, nota_k = k_vigente(con)
+    fraccion, alfa = ajuste_ausencias_vigente(con)
     filas = []
     for (_, equipo), g in df.groupby(["game_id", "team_id"]):
         ultimos = hist[hist.team_id == equipo].sort_values("game_date").game_id.drop_duplicates().tail(3)
         recientes = set(hist[hist.game_id.isin(ultimos) & (hist.team_id == equipo)].player_id)
         fuera = set(g[g.estado.isin(lesiones.NO_JUEGA)].player_id)
-        # Solo se reparten los minutos de bajas nuevas: las bajas largas ya no figuran en los minutos recientes.
-        base = {p: m for p, m in zip(g.player_id, g.min_proy) if pd.notna(m) and (p not in fuera or p in recientes)}
-        minutos = modelo.redistribuir(base, fuera & recientes)
-        for p, (m, _) in ajustes.items():
-            if p in minutos:
-                minutos[p] = m
-        escenarios = {"base": minutos}
-        for d in g[g.estado.isin(lesiones.DUDA) & g.player_id.isin(list(minutos))].itertuples():
-            escenarios[f"sin {d.jugador}"] = modelo.redistribuir(minutos, {d.player_id})
-        for nombre, mins in escenarios.items():
+        validos = g.dropna(subset=["min_proy"] + [f"tasa_{s}" for s in modelo.ESTADISTICAS])
+        presentes = {r.player_id: (r.min_proy, {s: getattr(r, f"tasa_{s}") for s in modelo.ESTADISTICAS})
+                     for r in validos.itertuples() if r.player_id not in fuera}
+        # Solo cuentan las bajas nuevas (jugó en alguno de los 3 últimos partidos): las largas ya están en las medias.
+        produccion = {r.player_id: (r.min_proy, {s: getattr(r, f"mu_{s}") for s in modelo.ESTADISTICAS})
+                      for r in validos.itertuples()}
+        nuevas = {p: produccion[p] for p in fuera & recientes if p in produccion}
+
+        def escenario(sin: dict) -> tuple[dict, dict]:
+            pres = {p: v for p, v in presentes.items() if p not in sin}
+            mins, medias = modelo.ajustar_ausencias(pres, {**nuevas, **sin}, alfa, fraccion)
+            for p, (m, _) in ajustes.items():  # Minutos a mano: la media se escala con ellos.
+                if p in mins and mins[p]:
+                    medias[p] = {s: v * m / mins[p] for s, v in medias[p].items()}
+                    mins[p] = m
+            return mins, medias
+
+        escenarios = {"base": escenario({})}
+        for d in g[g.estado.isin(lesiones.DUDA) & g.player_id.isin(list(presentes))].itertuples():
+            escenarios[f"sin {d.jugador}"] = escenario({d.player_id: produccion[d.player_id]})
+        # Jugadores sin muestra suficiente: se listan sin proyección.
+        sin_muestra = {r.player_id: (r.min_proy, {}) for r in g.itertuples()
+                       if r.player_id not in presentes and r.player_id not in fuera and pd.notna(r.min_proy)}
+        for nombre, (mins, medias) in escenarios.items():
+            mins = {**{p: m for p, (m, _) in sin_muestra.items()}, **mins}
             for r in g[g.player_id.isin(list(mins))].itertuples():
                 notas = [nota_k]
                 if r.player_id in ajustes:
                     notas.append(f"minutos a mano: {ajustes[r.player_id][1]}")
+                if (nuevas or nombre != "base") and r.player_id in medias and alfa + fraccion > 0:
+                    notas.append(f"ajuste por {len(nuevas) + (nombre != 'base')} baja(s) de rotación")
                 if pd.notna(r.min_sd) and r.min_sd > MINUTOS_INESTABLES:
                     notas.append(f"minutos inestables (desv. {r.min_sd:.1f})")
                 if r.n_previos < modelo.MUESTRA_MINIMA:
@@ -96,7 +122,7 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                         "estado": r.estado, "escenario": nombre, "minutos": mins[r.player_id], "min_sd": r.min_sd,
                         "n_previos": int(r.n_previos), "data_cutoff": corte, "notas": "; ".join(notas)}
                 for stat in modelo.ESTADISTICAS:
-                    mu = mins[r.player_id] * getattr(r, f"tasa_{stat}")
+                    mu = medias.get(r.player_id, {}).get(stat, np.nan)
                     bajo, alto = modelo.intervalo(mu, k[stat]) if pd.notna(mu) else (np.nan, np.nan)
                     fila.update({f"mu_{stat}": mu, f"k_{stat}": k[stat], f"p10_{stat}": bajo, f"p90_{stat}": alto})
                 filas.append(fila)
