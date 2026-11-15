@@ -39,6 +39,13 @@ uv run pytest
   manuales sin descargar.
 - `backtest`: walk-forward y comparación con los legs reales de `/parley`; guarda la dispersión que usan las proyecciones.
 
+## Página para el celular
+
+`actualizar` (y los botones de la página Hoy) generan `docs/index.html` y lo suben a GitHub, que lo publica con
+GitHub Pages en https://rikrdoesp-ui.github.io/parley507/. Es una foto de solo lectura de la última actualización:
+partidos, proyecciones por jugador, líneas, lesiones y backtest. El repositorio es público, así que la página también.
+Para no subirla: `uv run actualizar --sin-publicar`.
+
 ## Dónde están los datos
 
 | Qué | Dónde |

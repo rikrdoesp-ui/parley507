@@ -7,7 +7,7 @@ st.title("Hoy")
 fecha = ui.elegir_fecha()
 
 col1, col2 = st.columns(2)
-if col1.button("Actualizar datos", type="primary", help="Descarga box scores, calendario y lesiones; recalcula y exporta a /parley."):
+if col1.button("Actualizar datos", type="primary", help="Descarga box scores, calendario y lesiones; recalcula, exporta a /parley y publica la página del celular."):
     with st.status("Actualizando...", expanded=True) as estado:
         try:
             r = actualizar.actualizar(fecha, aviso=st.write)
@@ -20,12 +20,14 @@ if col1.button("Actualizar datos", type="primary", help="Descarga box scores, ca
         for a in r["avisos"]:
             st.warning(a)
         st.json({k: v for k, v in r.items() if k != "avisos"}, expanded=False)
-if col2.button("Recalcular proyecciones", help="Sin descargar: aplica lesiones y minutos corregidos a mano."):
+if col2.button("Recalcular proyecciones", help="Sin descargar: aplica lesiones y minutos corregidos a mano y vuelve a publicar la página."):
     with ui.conexion() as con:
         r = actualizar.recalcular(con, fecha)
+        actualizar.publicar_pagina(con, fecha, r)
     for a in r["avisos"]:
         st.warning(a)
     st.success(f"Proyecciones: {r.get('proyecciones', 0)} filas. Export: {r.get('export', 'no')}")
+    st.info(r.get("publicacion", ""))
 
 with ui.conexion() as con:
     juegos = pd.read_sql("""SELECT g.start_time_utc, a.abbreviation || ' @ ' || h.abbreviation AS partido, g.status,

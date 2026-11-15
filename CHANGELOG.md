@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.1 — 2026-11-15
+
+- Página estática para el celular (`docs/index.html`, GitHub Pages), regenerada y publicada en cada actualización.
+- El cálculo de props pasa a `psa.nba.props`, compartido por la app y la página.
+
 ## v0.1 — 2026-11-15
 
 Primera entrega: base + NBA de punta a punta.

@@ -1,6 +1,7 @@
 """Actualización completa: datos NBA, lesiones, referencias de /parley, proyecciones del día y export.
 
-Uso: uv run actualizar [--fecha AAAA-MM-DD] [--sin-ot]
+Uso: uv run actualizar [--fecha AAAA-MM-DD] [--sin-ot] [--sin-publicar]
+Al final regenera docs/index.html (página para el celular) y la sube a GitHub Pages.
 El botón "Actualizar datos" de la app ejecuta esta misma función.
 """
 import argparse
@@ -9,11 +10,11 @@ from datetime import date
 
 import requests
 
-from . import config, db, parley_io
+from . import config, db, pagina, parley_io
 from .nba import backtest, fuente, lesiones, proyeccion
 
 
-def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print) -> dict:
+def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publicar: bool = True) -> dict:
     fecha = fecha or config.hoy_panama().isoformat()
     actual = config.temporada_actual(date.fromisoformat(fecha))
     resumen = {"fecha": fecha, "avisos": []}
@@ -52,6 +53,16 @@ def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print) -> di
 
         aviso("Proyecciones del día...")
         recalcular(con, fecha, resumen)
+        aviso("Página para el celular...")
+        publicar_pagina(con, fecha, resumen, publicar)
+    return resumen
+
+
+def publicar_pagina(con, fecha: str, resumen: dict, subir: bool = True) -> dict:
+    """Regenera docs/index.html y, si `subir`, la publica con git. Un fallo de red no rompe la actualización."""
+    resumen["pagina"] = str(pagina.generar(con, fecha))
+    if subir:
+        resumen["publicacion"] = pagina.publicar(fecha)
     return resumen
 
 
@@ -76,9 +87,10 @@ def main(argv: list[str] | None = None) -> int:
     p = argparse.ArgumentParser(description="Actualiza datos NBA y proyecciones del día.")
     p.add_argument("--fecha", help="AAAA-MM-DD (hora de Panamá); por defecto hoy")
     p.add_argument("--sin-ot", action="store_true", help="No descarga estadísticas sin prórroga")
+    p.add_argument("--sin-publicar", action="store_true", help="Genera la página pero no la sube a GitHub")
     args = p.parse_args(argv)
     try:
-        r = actualizar(args.fecha, not args.sin_ot)
+        r = actualizar(args.fecha, not args.sin_ot, publicar=not args.sin_publicar)
     except RuntimeError as error:
         print(f"ERROR: {error}", file=sys.stderr)
         return 2
