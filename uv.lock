@@ -654,7 +654,7 @@ wheels = [
 
 [[package]]
 name = "panama-sports-analytics"
-version = "0.1.9"
+version = "0.1.10"
 source = { editable = "." }
 dependencies = [
     { name = "nba-api" },

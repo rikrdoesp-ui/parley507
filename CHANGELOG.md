@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.10 — 2026-11-15
+
+- Logo cambiado al boleto de parley (la opción elegida): muescas, línea de corte, talón con punto verde y el 507
+  en dígitos de marcador con los colores de Panamá (5 azul, 0 azul noche, 7 rojo; el blanco es el boleto).
+  Los dígitos son polígonos, no texto, para que el ícono de la pestaña y los PNG se vean igual sin fuentes web.
+
 ## v0.1.9 — 2026-11-15
 
 - Logo nuevo, elegido entre cinco opciones: una P cuyo tallo es la barra de probabilidad y cuya panza es un balón.

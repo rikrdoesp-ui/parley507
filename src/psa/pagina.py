@@ -182,7 +182,7 @@ def generar(con, fecha: str, destino: Path = DESTINO) -> Path:
     destino.parent.mkdir(parents=True, exist_ok=True)
     (destino.parent / ".nojekyll").touch()
     temporal = destino.with_suffix(".tmp")
-    logo = marca.svg({"fondo": "var(--logo-fondo)", "costura": "var(--logo-fondo)"})
+    logo = marca.svg({"fondo": "var(--logo-fondo)"})  # Las muescas del boleto toman el fondo del tema.
     html = PLANTILLA.replace("__VERSION__", version()).replace("__LOGO__", logo).replace("__DATOS__", contenido)
     temporal.write_text(html, encoding="utf-8")
     temporal.replace(destino)

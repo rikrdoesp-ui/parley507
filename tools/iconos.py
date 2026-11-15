@@ -31,14 +31,10 @@ def png(lado: int, destino: Path, margen: float = 0.0) -> None:
         if tipo == "rect":
             radio = 0 if (margen and q["w"] == 64) else q["r"] * f
             d.rounded_rectangle([p(q["x"], q["y"]), p(q["x"] + q["w"], q["y"] + q["h"])], radius=radio, fill=c)
-        elif tipo == "curva":
-            r = q["r"]
-            d.arc([p(q["cx"] - r, q["cy"] - r), p(q["cx"] + r, q["cy"] + r)], start=q["inicio"], end=q["fin"],
-                  fill=c, width=max(1, round(q["grosor"] * f)))
         elif tipo == "circulo":
             d.ellipse([p(q["cx"] - q["r"], q["cy"] - q["r"]), p(q["cx"] + q["r"], q["cy"] + q["r"])], fill=c)
-        elif tipo == "linea":
-            d.line([p(q["x1"], q["y1"]), p(q["x2"], q["y2"])], fill=c, width=max(1, round(q["grosor"] * f)))
+        elif tipo == "poligono":
+            d.polygon([p(x, y) for x, y in q["puntos"]], fill=c)
     img.resize((lado, lado), Image.LANCZOS).save(destino)
 
 
