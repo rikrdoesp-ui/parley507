@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.5 — 2026-11-15
+
+- Props en bloques plegables por partido (abierto el próximo en empezar) y, dentro, apartados plegables por área y
+  lado (Puntos Over, Puntos Under, Rebotes, Asistencias), ordenados por probabilidad de salir, con cuota, VE y
+  proyección en filas compactas.
+
 ## v0.1.4 — 2026-11-15
 
 - Props agrupadas por partido, en orden de inicio, con la hora de Panamá.

@@ -241,6 +241,15 @@ table.props td div{font-size:11px}
 .mejor:first-of-type{border-top:0}
 .badge.real{background:var(--accent);color:#fff}
 .grupo{margin:18px 2px 8px}
+details.juego-props{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:10px}
+details.juego-props>summary{list-style:none;cursor:pointer}
+details.juego-props>summary::-webkit-details-marker{display:none}
+details.juego-props>summary .nombre::after{content:' ▸';color:var(--muted)}
+details.juego-props[open]>summary .nombre::after{content:' ▾'}
+details.area{border-top:1px solid var(--line);padding:8px 0 2px;margin-top:8px}
+details.area>summary{cursor:pointer;color:var(--text);font-size:14px}
+.prop-fila{padding:7px 0 7px 10px;border-top:1px solid var(--line);font-size:14px}
+.prop-fila .muted{font-size:12px;margin-top:2px}
 .grupo a.nombre{color:var(--text);text-decoration:none;font-size:16px}
 .reloj{font-weight:600}
 .vacio{color:var(--muted);text-align:center;padding:30px 0}
@@ -359,25 +368,6 @@ function vistaJuego(nombre) {
   return out;
 }
 
-function tarjetaProp(p) {
-  if (p['P over'] === undefined || p['P over'] === null)
-    return el('div', {class: 'card'}, el('div', {class: 'nombre'}, `${p.jugador} · ${p.mercado} ${p['línea']}`),
-      el('div', {class: 'muted'}, p['estado de datos']));
-  return el('div', {class: 'card'},
-        el('div', {class: 'fila'}, el('span', {class: 'nombre'}, `${p.jugador} · ${p.mercado} ${p['línea']}`),
-          el('span', {class: 'badge'}, `media ${num(p.media)}`)),
-        el('div', {class: 'muted'}, `${p.casa} · ${num(p.minutos)} min · rango ${p['rango 10-90']}`),
-        el('table', {},
-          el('tr', {}, el('th', {}, ''), el('th', {}, 'P mezcla'), el('th', {}, 'cuota justa'),
-            el('th', {}, String(p.casa).startsWith('Consenso') ? 'ref. sin margen' : 'cuota casa'), el('th', {}, 'edge'), el('th', {}, 'VE')),
-          ...[['Over', 'over'], ['Under', 'under']].map(([t, k]) => el('tr', {},
-            el('td', {}, t), el('td', {}, pct(p['P mezcla ' + k] ?? p['P ' + k])), el('td', {}, num(p['cuota justa ' + k], 2)),
-            el('td', {}, num(p['cuota ' + k], 2)), el('td', {class: signo(p['edge ' + k])}, pct(p['edge ' + k])),
-            el('td', {class: signo(p['VE ' + k])}, pct(p['VE ' + k]))))),
-        p.riesgos && p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).length
-          ? el('div', {class: 'muted'}, '⚠ ' + p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).join(' · ')) : '');
-}
-
 const vistas = {
   Partidos() {
     if (!D.partidos.length) return [el('p', {class: 'vacio'}, 'Sin partidos NBA este día.')];
@@ -406,19 +396,43 @@ const vistas = {
     const out = [];
     if (!D.con_precio) out.push(el('div', {class: 'aviso'}, 'PROYECCIÓN ESTADÍSTICA — SIN VALOR DE APUESTA CONFIRMADO'));
     if (!D.props.length) return out.concat(el('p', {class: 'vacio'}, 'No hay líneas cargadas para este día.'));
-    // Agrupadas por partido, en orden de inicio; dentro de cada partido, por VE (ya vienen ordenadas).
+    // Un bloque plegable por partido (en orden de inicio). Dentro, un apartado por área y lado, ordenado por la
+    // probabilidad de salir. La de mayor probabilidad suele pagar menos: el VE dice si el precio la compensa.
     const grupos = new Map(D.partidos.map(p => [p.p, []]));
     for (const p of D.props) {
       const clave = p.partido || 'Sin partido identificado';
       if (!grupos.has(clave)) grupos.set(clave, []);
       grupos.get(clave).push(p);
     }
+    const ahora = Date.now();
+    const proximo = D.partidos.find(j => j.inicio && Date.parse(j.inicio) > ahora && (grupos.get(j.p) || []).length);
     for (const [nombre, lista] of grupos) {
       if (!lista.length) continue;
       const juego = D.partidos.find(x => x.p === nombre);
-      out.push(el('div', {class: 'grupo'}, el('a', {class: 'nombre', href: '#juego=' + encodeURIComponent(nombre)}, nombre),
-        el('div', {class: 'muted'}, juego ? [`${juego.hora} (Panamá) · `, reloj(juego), ` · ${lista.length} líneas`] : '')));
-      out.push(...lista.map(tarjetaProp));
+      const bloque = el('details', {class: 'juego-props'},
+        el('summary', {}, el('span', {class: 'nombre'}, nombre),
+          el('div', {class: 'muted'}, juego ? [`${juego.hora} (Panamá) · `, reloj(juego), ` · ${lista.length} líneas`] : `${lista.length} líneas`)));
+      if (juego && proximo && juego.p === proximo.p) bloque.open = true;
+      for (const mercado of ['puntos', 'rebotes', 'asistencias']) for (const [lado, k] of [['Over', 'over'], ['Under', 'under']]) {
+        const filas = lista.filter(p => p.mercado === mercado && p['P ' + k] !== undefined && p['P ' + k] !== null)
+          .map(p => ({p, prob: p['P mezcla ' + k] ?? p['P ' + k], cuota: p['cuota ' + k], ve: p['VE ' + k]}))
+          .sort((a, b) => b.prob - a.prob);
+        if (!filas.length) continue;
+        const mejor = filas[0];
+        const area = el('details', {class: 'area'},
+          el('summary', {}, el('b', {}, `${mercado[0].toUpperCase() + mercado.slice(1)} ${lado}`), ` (${filas.length})`,
+            el('div', {class: 'muted'}, `mejor: ${mejor.p.jugador} ${mejor.p['línea']} · ${pct(mejor.prob)}`)));
+        for (const f of filas) area.append(el('div', {class: 'prop-fila'},
+          el('div', {class: 'fila'}, el('span', {}, el('b', {}, f.p.jugador), ` ${lado} ${num(f.p['línea'])}`),
+            el('b', {}, pct(f.prob))),
+          el('div', {class: 'fila muted'},
+            el('span', {}, `proy ${num(f.p.media)} · ${num(f.p.minutos)} min` + (f.p.riesgos && f.p.riesgos.includes('inestables') ? ' · ⚠ min. inestables' : '')),
+            el('span', {}, `@${num(f.cuota, 2)} · `, el('span', {class: signo(f.ve)}, `VE ${f.ve === null || f.ve === undefined ? '—' : (f.ve > 0 ? '+' : '') + (f.ve * 100).toFixed(1) + '%'}`)))));
+        bloque.append(area);
+      }
+      const sin = lista.filter(p => p['P over'] === undefined || p['P over'] === null);
+      if (sin.length) bloque.append(el('div', {class: 'muted'}, `Sin proyección: ${sin.map(p => p.jugador + ' ' + p.mercado).join(', ')}`));
+      out.push(bloque);
     }
     return out.concat(el('p', {class: 'muted'}, 'P mezcla: mercado sin margen movido por el modelo (máx. 4 puntos). Edge: mezcla menos mercado. VE solo con precio de una casa; el consenso BettingPros es referencia.'));
   },
