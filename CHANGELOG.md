@@ -2,6 +2,8 @@
 
 ## v0.1.3 — 2026-11-15
 
+- La página del celular muestra la versión junto al nombre (tomada de `pyproject.toml`).
+
 - Probabilidad anclada al mercado para edge y VE (`props.mezclar`): mercado sin margen + 25 % hacia el modelo, con los
   topes de /parley. Antes, 140 de 246 líneas de Stake salían con VE positivo por errores del modelo; con el ancla, 0.
 - La página del celular muestra la mezcla con sus partes (mercado y modelo) y el VE, y avisa cuando ninguna línea

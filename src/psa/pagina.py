@@ -6,6 +6,7 @@ ni el registro de apuestas, solo proyecciones, lesiones, líneas del día y el r
 import json
 import math
 import subprocess
+import tomllib
 from datetime import date, datetime
 from pathlib import Path
 
@@ -19,6 +20,11 @@ from .nba import props as props_nba
 RAIZ = Path(__file__).resolve().parents[2]
 DESTINO = RAIZ / "index.html"  # GitHub Pages publica desde la raíz de main.
 CORTOS = {"puntos": "pts", "rebotes": "reb", "asistencias": "ast"}
+
+
+def version() -> str:
+    """Versión de pyproject.toml: una sola fuente para la página y el CHANGELOG."""
+    return tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
 
 
 def limpio(valor, decimales: int = 3):
@@ -155,7 +161,7 @@ def generar(con, fecha: str, destino: Path = DESTINO) -> Path:
     destino.parent.mkdir(parents=True, exist_ok=True)
     (destino.parent / ".nojekyll").touch()
     temporal = destino.with_suffix(".tmp")
-    temporal.write_text(PLANTILLA.replace("__DATOS__", contenido), encoding="utf-8")
+    temporal.write_text(PLANTILLA.replace("__VERSION__", version()).replace("__DATOS__", contenido), encoding="utf-8")
     temporal.replace(destino)
     return destino
 
@@ -185,7 +191,7 @@ PLANTILLA = r"""<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex">
-<title>parley507</title>
+<title>parley507 v__VERSION__</title>
 <style>
 :root{--bg:#f6f7f9;--card:#fff;--text:#14171c;--muted:#5d6673;--line:#e3e6eb;--accent:#0b6bcb;--ok:#127a3e;--warn:#a35c00;--bad:#b42318;--chip:#eef1f5}
 @media (prefers-color-scheme:dark){:root{--bg:#0f1216;--card:#181c22;--text:#e8ebef;--muted:#9aa4b2;--line:#2a3039;--accent:#5aa9ff;--ok:#4cc38a;--warn:#f0a845;--bad:#ff6b5e;--chip:#222831}}
@@ -193,6 +199,7 @@ PLANTILLA = r"""<!doctype html>
 body{margin:0;background:var(--bg);color:var(--text);font:15px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;-webkit-text-size-adjust:100%}
 header{padding:14px 16px 6px;max-width:760px;margin:0 auto}
 h1{font-size:20px;margin:0}
+.version{font-size:13px;font-weight:500;color:var(--muted);vertical-align:middle}
 .sub{color:var(--muted);font-size:13px;margin-top:2px}
 nav{position:sticky;top:0;z-index:2;background:var(--bg);border-bottom:1px solid var(--line);display:flex;gap:4px;padding:8px 12px;overflow-x:auto;max-width:760px;margin:0 auto}
 nav button{flex:0 0 auto;border:0;border-radius:999px;padding:8px 14px;background:var(--chip);color:var(--text);font:inherit;font-size:14px}
@@ -233,7 +240,7 @@ table.props td div{font-size:11px}
 </style>
 </head>
 <body>
-<header><h1>parley507</h1><div class="sub" id="sub"></div></header>
+<header><h1>parley507 <span class="version">v__VERSION__</span></h1><div class="sub" id="sub"></div></header>
 <nav id="tabs" role="tablist"></nav>
 <main id="vista"></main>
 <script type="application/json" id="datos">__DATOS__</script>
