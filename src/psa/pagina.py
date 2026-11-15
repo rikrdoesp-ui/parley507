@@ -97,6 +97,9 @@ def datos(con, fecha: str) -> dict:
     props = pd.read_sql("SELECT * FROM player_props WHERE game_date = ?", con, params=(fecha,))
     tabla = props_nba.evaluar(pred, props) if not (pred.empty or props.empty) else pd.DataFrame()
     lineas = [{k: limpio(v) for k, v in fila.items()} for fila in tabla.to_dict("records")]
+    partido_de = {int(r.player_id): nombres.get(r.game_id, "") for r in pred.itertuples()} if not pred.empty else {}
+    for fila in lineas:
+        fila["partido"] = partido_de.get(int(fila["player_id"]), "") if fila.get("player_id") is not None else ""
     # Línea real por jugador y mercado: la de una casa (manual) manda sobre el consenso de referencia.
     reales = {}
     for fila in sorted(lineas, key=lambda f: not props_nba.es_consenso(f["casa"])):
@@ -149,6 +152,7 @@ def datos(con, fecha: str) -> dict:
         "modelo": config.MODELO_NBA, "corte": limpio(pred.data_cutoff.max()) if not pred.empty else None,
         "reporte_lesiones": reporte,
         "partidos": [{"hora": hora_panama(r.start_time_utc), "p": r.partido, "estado": r.status,
+                      "inicio": r.start_time_utc if isinstance(r.start_time_utc, str) else None,
                       "marcador": f"{int(r.away_score)}-{int(r.home_score)}" if pd.notna(r.away_score) else ""}
                      for r in juegos.itertuples()],
         "jugadores": jugadores, "lesiones": lista_lesiones, "props": lineas, "con_precio": props_nba.hay_precio(tabla),
@@ -236,6 +240,9 @@ table.props td div{font-size:11px}
 .mejor{padding:8px 0;border-top:1px solid var(--line)}
 .mejor:first-of-type{border-top:0}
 .badge.real{background:var(--accent);color:#fff}
+.grupo{margin:18px 2px 8px}
+.grupo a.nombre{color:var(--text);text-decoration:none;font-size:16px}
+.reloj{font-weight:600}
 .vacio{color:var(--muted);text-align:center;padding:30px 0}
 </style>
 </head>
@@ -259,6 +266,18 @@ document.getElementById('sub').textContent =
   `NBA · ${D.fecha} · actualizado ${D.generado} (Panamá)` + (D.reporte_lesiones ? ` · lesiones ${D.reporte_lesiones}` : '');
 
 const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asist.'};
+// Cuenta regresiva hasta el inicio y, después, minutos desde que empezó (reloj real, no el del partido).
+const duracion = m => m >= 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : `${m} min`;
+function relojTexto(iso, estado) {
+  if (estado === 'final') return 'final';
+  if (!iso) return '';
+  const min = Math.round((Date.parse(iso) - Date.now()) / 60000);
+  if (min > 0) return `empieza en ${duracion(min)}`;
+  if (-min <= 180) return `en juego · lleva ${duracion(-min)}`;
+  return `empezó hace ${duracion(-min)} · ya debería haber terminado`;
+}
+const reloj = p => el('span', {class: 'reloj', 'data-inicio': p.inicio || '', 'data-estado': p.estado || ''}, relojTexto(p.inicio, p.estado));
+setInterval(() => document.querySelectorAll('.reloj').forEach(n => n.textContent = relojTexto(n.dataset.inicio, n.dataset.estado)), 30000);
 const lado = p => p.lado === 'over' ? 'Over' : 'Under';
 function celdaModelo(p) {
   if (!p.lado) return el('td', {}, '—');
@@ -317,7 +336,7 @@ function vistaJuego(nombre) {
   const p = D.partidos.find(x => x.p === nombre);
   const jug = D.jugadores.filter(j => j.p === nombre);
   const out = [el('a', {href: '#', class: 'volver'}, '← Partidos'),
-    el('h2', {}, nombre), el('div', {class: 'muted'}, p ? `${p.hora} (Panamá) · ${p.estado}${p.marcador ? ' · ' + p.marcador : ''}` : '')];
+    el('h2', {}, nombre), el('div', {class: 'muted'}, p ? [`${p.hora} (Panamá) · `, reloj(p), p.marcador ? ' · ' + p.marcador : ''] : '')];
   if (!jug.length) return out.concat(el('p', {class: 'vacio'}, 'Sin proyecciones para este partido.'));
   const mejores = mejoresProps(jug);
   const caja = el('div', {class: 'card'}, el('div', {class: 'nombre'}, 'Mejores props del partido'));
@@ -340,12 +359,31 @@ function vistaJuego(nombre) {
   return out;
 }
 
+function tarjetaProp(p) {
+  if (p['P over'] === undefined || p['P over'] === null)
+    return el('div', {class: 'card'}, el('div', {class: 'nombre'}, `${p.jugador} · ${p.mercado} ${p['línea']}`),
+      el('div', {class: 'muted'}, p['estado de datos']));
+  return el('div', {class: 'card'},
+        el('div', {class: 'fila'}, el('span', {class: 'nombre'}, `${p.jugador} · ${p.mercado} ${p['línea']}`),
+          el('span', {class: 'badge'}, `media ${num(p.media)}`)),
+        el('div', {class: 'muted'}, `${p.casa} · ${num(p.minutos)} min · rango ${p['rango 10-90']}`),
+        el('table', {},
+          el('tr', {}, el('th', {}, ''), el('th', {}, 'P mezcla'), el('th', {}, 'cuota justa'),
+            el('th', {}, String(p.casa).startsWith('Consenso') ? 'ref. sin margen' : 'cuota casa'), el('th', {}, 'edge'), el('th', {}, 'VE')),
+          ...[['Over', 'over'], ['Under', 'under']].map(([t, k]) => el('tr', {},
+            el('td', {}, t), el('td', {}, pct(p['P mezcla ' + k] ?? p['P ' + k])), el('td', {}, num(p['cuota justa ' + k], 2)),
+            el('td', {}, num(p['cuota ' + k], 2)), el('td', {class: signo(p['edge ' + k])}, pct(p['edge ' + k])),
+            el('td', {class: signo(p['VE ' + k])}, pct(p['VE ' + k]))))),
+        p.riesgos && p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).length
+          ? el('div', {class: 'muted'}, '⚠ ' + p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).join(' · ')) : '');
+}
+
 const vistas = {
   Partidos() {
     if (!D.partidos.length) return [el('p', {class: 'vacio'}, 'Sin partidos NBA este día.')];
     return [el('p', {class: 'muted'}, 'Toca un partido para ver sus props.'),
       ...D.partidos.map(p => el('a', {class: 'card fila juego', href: '#juego=' + encodeURIComponent(p.p)},
-        el('span', {}, el('span', {class: 'nombre'}, p.p), el('div', {class: 'muted'}, p.estado + (p.marcador ? ' · ' + p.marcador : ''))),
+        el('span', {}, el('span', {class: 'nombre'}, p.p), el('div', {class: 'muted'}, reloj(p), p.marcador ? ' · ' + p.marcador : '')),
         el('span', {class: 'badge'}, p.hora + ' ›')))];
   },
   Jugadores() {
@@ -368,25 +406,19 @@ const vistas = {
     const out = [];
     if (!D.con_precio) out.push(el('div', {class: 'aviso'}, 'PROYECCIÓN ESTADÍSTICA — SIN VALOR DE APUESTA CONFIRMADO'));
     if (!D.props.length) return out.concat(el('p', {class: 'vacio'}, 'No hay líneas cargadas para este día.'));
+    // Agrupadas por partido, en orden de inicio; dentro de cada partido, por VE (ya vienen ordenadas).
+    const grupos = new Map(D.partidos.map(p => [p.p, []]));
     for (const p of D.props) {
-      if (p['P over'] === undefined || p['P over'] === null) {
-        out.push(el('div', {class: 'card'}, el('div', {class: 'nombre'}, `${p.jugador} · ${p.mercado} ${p['línea']}`),
-          el('div', {class: 'muted'}, p['estado de datos'])));
-        continue;
-      }
-      out.push(el('div', {class: 'card'},
-        el('div', {class: 'fila'}, el('span', {class: 'nombre'}, `${p.jugador} · ${p.mercado} ${p['línea']}`),
-          el('span', {class: 'badge'}, `media ${num(p.media)}`)),
-        el('div', {class: 'muted'}, `${p.casa} · ${num(p.minutos)} min · rango ${p['rango 10-90']}`),
-        el('table', {},
-          el('tr', {}, el('th', {}, ''), el('th', {}, 'P mezcla'), el('th', {}, 'cuota justa'),
-            el('th', {}, String(p.casa).startsWith('Consenso') ? 'ref. sin margen' : 'cuota casa'), el('th', {}, 'edge'), el('th', {}, 'VE')),
-          ...[['Over', 'over'], ['Under', 'under']].map(([t, k]) => el('tr', {},
-            el('td', {}, t), el('td', {}, pct(p['P mezcla ' + k] ?? p['P ' + k])), el('td', {}, num(p['cuota justa ' + k], 2)),
-            el('td', {}, num(p['cuota ' + k], 2)), el('td', {class: signo(p['edge ' + k])}, pct(p['edge ' + k])),
-            el('td', {class: signo(p['VE ' + k])}, pct(p['VE ' + k]))))),
-        p.riesgos && p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).length
-          ? el('div', {class: 'muted'}, '⚠ ' + p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).join(' · ')) : ''));
+      const clave = p.partido || 'Sin partido identificado';
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave).push(p);
+    }
+    for (const [nombre, lista] of grupos) {
+      if (!lista.length) continue;
+      const juego = D.partidos.find(x => x.p === nombre);
+      out.push(el('div', {class: 'grupo'}, el('a', {class: 'nombre', href: '#juego=' + encodeURIComponent(nombre)}, nombre),
+        el('div', {class: 'muted'}, juego ? [`${juego.hora} (Panamá) · `, reloj(juego), ` · ${lista.length} líneas`] : '')));
+      out.push(...lista.map(tarjetaProp));
     }
     return out.concat(el('p', {class: 'muted'}, 'P mezcla: mercado sin margen movido por el modelo (máx. 4 puntos). Edge: mezcla menos mercado. VE solo con precio de una casa; el consenso BettingPros es referencia.'));
   },

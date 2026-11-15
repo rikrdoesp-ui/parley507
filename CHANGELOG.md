@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.4 — 2026-11-15
+
+- Props agrupadas por partido, en orden de inicio, con la hora de Panamá.
+- Cuenta regresiva hasta el inicio y, ya iniciado, minutos desde el comienzo (se actualiza cada 30 s), también en
+  la lista de partidos y en cada juego.
+
 ## v0.1.3 — 2026-11-15
 
 - La página del celular muestra la versión junto al nombre (tomada de `pyproject.toml`).
