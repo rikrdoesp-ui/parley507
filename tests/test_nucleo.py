@@ -180,6 +180,16 @@ def test_lineas_de_stake_con_precio():
     assert props.es_consenso("Consenso BettingPros sin margen (5 casas)") and not props.es_consenso("Stake")
 
 
+def test_mezcla_anclada_al_mercado():
+    from psa.nba import props
+    p_mkt = odds.sin_margen(1.90, 1.90)
+    assert props.mezclar(p_mkt, 0.90, "dos_lados") == pytest.approx(0.54)  # Tope de 4 puntos aunque el modelo diga 90 %.
+    assert props.mezclar(p_mkt, 0.52, "dos_lados") == pytest.approx(0.505)  # Dentro del tope: 25 % del camino.
+    assert props.mezclar(p_mkt, 0.10, "consenso") == pytest.approx(0.47)
+    p, fuente = props.mercado_over(1.90, None, "Stake")
+    assert fuente == "un_lado" and p == pytest.approx((1 / 1.90) / 1.08)
+
+
 def test_resolver_jugador_abreviado_y_ambiguo():
     plantilla = pd.DataFrame({"player_id": [1, 2, 3], "jugador": ["Mikal Bridges", "Jalen Williams", "Jaylin Williams"]})
     assert parley_io.resolver_jugador("M. Bridges", plantilla) == 1

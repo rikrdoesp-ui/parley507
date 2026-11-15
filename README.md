@@ -76,7 +76,10 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
    valores los elige el backtest con los partidos históricos en que faltó alguien: hoy fracción de minutos 0 y alfa
    0.25 (repartir todos los minutos empeoraba el error). Tope: +35 % de la media por uso, +8 minutos, 40 minutos.
    Questionable/Doubtful: escenario base "juega" y un escenario "sin X" para sus compañeros.
-5. Menos de 5 partidos previos = "muestra insuficiente", sin proyección.
+5. **Ancla al mercado:** con línea real, edge y VE no usan la probabilidad del modelo sola. Parten del mercado sin
+   margen y el modelo la mueve un 25 % del camino, con tope de 4 puntos (dos lados de una casa), 3 (consenso) o 5
+   (una sola cuota), como en /parley. El peso se recalibrará con 100 legs comparables. La del modelo se sigue mostrando.
+6. Menos de 5 partidos previos = "muestra insuficiente", sin proyección.
 
 Limitaciones conocidas: el efecto de uso es un promedio y se queda corto cuando faltan varios del mismo puesto; no modela rival, ritmo, descanso, blowout ni cambios
 de equipo; la titularidad histórica es desconocida (NULL). Solo temporada regular: en playoffs no hay box scores

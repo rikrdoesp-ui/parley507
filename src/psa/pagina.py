@@ -57,14 +57,22 @@ def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -
     if mu is None or pd.isna(mu):
         return salida
     po, pu = float(modelo.p_over(mu, k, linea)), float(modelo.p_under(mu, k, linea))
-    lado = "over" if po >= pu else "under"
+    if real and real.get("P mezcla over") is not None:
+        # Con línea real manda la mezcla anclada al mercado: el lado es el que el modelo empuja sobre el mercado.
+        lado = "over" if (real.get("edge over") or 0) >= (real.get("edge under") or 0) else "under"
+        p_lado = real[f"P mezcla {lado}"]
+    else:
+        lado = "over" if po >= pu else "under"
+        p_lado = max(po, pu)
     ultimos = valores[:10]
     aciertos = sum((v > linea) if lado == "over" else (v < linea) for v in ultimos)
-    salida.update({"p_over": round(po, 3), "lado": lado, "p_lado": round(max(po, pu), 3),
-                   "aciertos": [int(aciertos), len(ultimos)]})
+    salida.update({"p_over": round(po, 3), "lado": lado, "p_lado": round(p_lado, 3),
+                   "p_modelo": round(po if lado == "over" else pu, 3), "aciertos": [int(aciertos), len(ultimos)]})
     if real:
+        p_mercado = real.get("P mercado over (sin margen)")
         salida.update({"edge": limpio(real.get(f"edge {lado}")), "ve": limpio(real.get(f"VE {lado}")),
-                       "cuota": limpio(real.get(f"cuota {lado}"), 2), "origen": real["origen"]})
+                       "cuota": limpio(real.get(f"cuota {lado}"), 2), "origen": real["origen"],
+                       "p_mercado": None if p_mercado is None else round(p_mercado if lado == "over" else 1 - p_mercado, 3)})
     return salida
 
 
@@ -247,8 +255,9 @@ const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asist.'};
 const lado = p => p.lado === 'over' ? 'Over' : 'Under';
 function celdaModelo(p) {
   if (!p.lado) return el('td', {}, '—');
-  return el('td', {class: p.edge > 0 ? 'pos' : ''}, el('b', {}, `${lado(p)} ${pct(p.p_lado).replace(' %', '%')}`),
-    p.edge !== null && p.edge !== undefined ? el('div', {class: signo(p.edge)}, `edge ${p.edge > 0 ? '+' : ''}${(p.edge * 100).toFixed(1)}`) : '');
+  const ve = p.ve !== null && p.ve !== undefined;
+  return el('td', {class: ve && p.ve > 0 ? 'pos' : ''}, el('b', {}, `${lado(p)} ${pct(p.p_lado).replace(' %', '%')}`),
+    ve ? el('div', {class: signo(p.ve)}, `VE ${p.ve > 0 ? '+' : ''}${(p.ve * 100).toFixed(1)}`) : '');
 }
 function tablaProps(j) {
   return el('table', {class: 'props'},
@@ -279,8 +288,10 @@ function tarjetaJugador(j) {
   return c;
 }
 
-const NOTA_LINEA = '* Línea de referencia (media L10 redondeada), sin cuota: indica el lado que favorece el modelo, no si hay valor. '
-  + 'Edge solo con línea real. x/10: veces que superó (over) o no llegó (under) a la línea en sus últimos 10. BET/PASS lo decide /parley.';
+const NOTA_LINEA = 'Con línea real, la probabilidad es una mezcla: parte del mercado sin margen y el modelo la mueve como mucho 4 puntos, '
+  + 'porque el modelo aún no le gana al mercado. VE = mezcla × cuota − 1. '
+  + '* Línea de referencia (media L10 redondeada), sin cuota: solo indica el lado del modelo, no si hay valor. '
+  + 'x/10: veces que superó (over) o no llegó (under) a la línea en sus últimos 10. BET/PASS lo decide /parley.';
 
 // Mejores props del partido: primero las de línea real con edge a favor; luego, con línea de referencia,
 // las de mayor probabilidad entre jugadores de rotación (20+ min), para no premiar unders de suplentes.
@@ -290,7 +301,7 @@ function mejoresProps(jugadores) {
     const p = j.props[k];
     if (!p || !p.lado || j.notas.includes('muestra insuficiente')) continue;
     if (p.tipo === 'ref' && (j.min || 0) < 20) continue;
-    todas.push({j, k, p, orden: p.tipo === 'real' ? [0, -(p.edge ?? -1)] : [1, -p.p_lado]});
+    todas.push({j, k, p, orden: p.tipo === 'real' ? [0, -(p.ve ?? p.edge ?? -1)] : [1, -p.p_lado]});
   }
   return todas.filter(x => x.p.tipo === 'ref' || x.p.edge > 0)
     .sort((a, b) => a.orden[0] - b.orden[0] || a.orden[1] - b.orden[1]).slice(0, 8);
@@ -304,11 +315,15 @@ function vistaJuego(nombre) {
   const mejores = mejoresProps(jug);
   const caja = el('div', {class: 'card'}, el('div', {class: 'nombre'}, 'Mejores props del partido'));
   if (!mejores.length) caja.append(el('div', {class: 'muted'}, 'Ninguna prop destaca.'));
+  if (mejores.some(x => x.p.tipo === 'real') && !mejores.some(x => x.p.ve > 0))
+    caja.append(el('div', {class: 'aviso'}, 'Ninguna línea de Stake tiene VE positivo: estas son las que el modelo empuja a favor, pero el margen de la casa las deja en negativo.'));
   for (const {j, k, p} of mejores) caja.append(el('div', {class: 'mejor'},
     el('div', {class: 'fila'}, el('span', {}, el('b', {}, j.j), ` ${NOMBRES[k]} ${lado(p)} ${num(p.linea)}`),
       el('span', {class: 'badge ' + (p.tipo === 'real' ? 'real' : '')}, p.tipo === 'real' ? 'línea real' : 'referencia')),
-    el('div', {class: 'muted'}, `Modelo ${pct(p.p_lado)} · proy ${num(p.media)} · L10 ${num(p.l10)} · ${p.aciertos[0]}/${p.aciertos[1]}`
-      + (p.edge !== undefined && p.edge !== null ? ` · edge +${(p.edge * 100).toFixed(1)}` : '')
+    el('div', {class: 'muted'}, (p.tipo === 'real' && p.p_mercado !== undefined && p.p_mercado !== null
+        ? `Mezcla ${pct(p.p_lado)} (mercado ${pct(p.p_mercado)}, modelo ${pct(p.p_modelo)})` : `Modelo ${pct(p.p_lado)}`)
+      + ` · proy ${num(p.media)} · L10 ${num(p.l10)} · ${p.aciertos[0]}/${p.aciertos[1]}`
+      + (p.ve !== undefined && p.ve !== null ? ` · VE ${p.ve > 0 ? '+' : ''}${(p.ve * 100).toFixed(1)}` : '')
       + (p.cuota && !String(p.casa).startsWith('Consenso') ? ` · cuota ${num(p.cuota, 2)}` : '')
       + (j.est ? ` · ⚠ ${j.est}` : '') + (j.sd > 6 ? ' · ⚠ minutos inestables' : ''))));
   out.push(caja, el('p', {class: 'muted'}, NOTA_LINEA));
@@ -357,16 +372,16 @@ const vistas = {
           el('span', {class: 'badge'}, `media ${num(p.media)}`)),
         el('div', {class: 'muted'}, `${p.casa} · ${num(p.minutos)} min · rango ${p['rango 10-90']}`),
         el('table', {},
-          el('tr', {}, el('th', {}, ''), el('th', {}, 'P modelo'), el('th', {}, 'cuota justa'),
+          el('tr', {}, el('th', {}, ''), el('th', {}, 'P mezcla'), el('th', {}, 'cuota justa'),
             el('th', {}, String(p.casa).startsWith('Consenso') ? 'ref. sin margen' : 'cuota casa'), el('th', {}, 'edge'), el('th', {}, 'VE')),
           ...[['Over', 'over'], ['Under', 'under']].map(([t, k]) => el('tr', {},
-            el('td', {}, t), el('td', {}, pct(p['P ' + k])), el('td', {}, num(p['cuota justa ' + k], 2)),
+            el('td', {}, t), el('td', {}, pct(p['P mezcla ' + k] ?? p['P ' + k])), el('td', {}, num(p['cuota justa ' + k], 2)),
             el('td', {}, num(p['cuota ' + k], 2)), el('td', {class: signo(p['edge ' + k])}, pct(p['edge ' + k])),
             el('td', {class: signo(p['VE ' + k])}, pct(p['VE ' + k]))))),
         p.riesgos && p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).length
           ? el('div', {class: 'muted'}, '⚠ ' + p.riesgos.split('; ').filter(n => !n.startsWith('dispersión')).join(' · ')) : ''));
     }
-    return out.concat(el('p', {class: 'muted'}, 'Edge: modelo menos mercado sin margen, misma línea. VE solo con precio de una casa; el consenso BettingPros es referencia.'));
+    return out.concat(el('p', {class: 'muted'}, 'P mezcla: mercado sin margen movido por el modelo (máx. 4 puntos). Edge: mezcla menos mercado. VE solo con precio de una casa; el consenso BettingPros es referencia.'));
   },
   Lesiones() {
     if (!D.lesiones.length) return [el('p', {class: 'vacio'}, 'Sin reporte de lesiones para este día.')];

@@ -58,12 +58,12 @@ tabla = props_nba.evaluar(pred, props, escenario)
 if not props_nba.hay_precio(tabla):
     st.warning(ui.SIN_VALOR + ": ninguna línea tiene precio apostable ingresado.")
 porcentaje = {c: st.column_config.NumberColumn(format="percent") for c in
-              ["P over", "P under", "P mercado over (sin margen)", "edge over", "edge under", "VE over", "VE under",
+              ["P over", "P under", "P mercado over (sin margen)", "P mezcla over", "P mezcla under", "edge modelo over", "edge over", "edge under", "VE over", "VE under",
                "mejor VE", "mejor edge"]}
 st.dataframe(tabla, hide_index=True, width="stretch",
              column_config={**porcentaje, "media": st.column_config.NumberColumn(format="%.1f"),
                             "minutos": st.column_config.NumberColumn(format="%.1f"),
                             "cuota justa over": st.column_config.NumberColumn(format="%.2f"),
                             "cuota justa under": st.column_config.NumberColumn(format="%.2f")})
-st.caption("Edge = probabilidad del modelo menos la del mercado sin margen (misma línea). VE solo con precio de una "
+st.caption("P mezcla = mercado sin margen movido por el modelo (25 %, máx. 4 puntos con dos lados). Edge y VE usan la mezcla; VE solo con precio de una "
            "casa; el consenso de BettingPros es referencia, no precio. Ordenado por VE y edge, no por probabilidad.")
