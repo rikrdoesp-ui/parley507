@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.11 — 2026-11-15
+
+- Las direcciones del ícono de pestaña, el de iPhone y el manifiesto llevan la versión (`?v=`), para que el
+  navegador descargue el logo nuevo en lugar del que tenía en caché.
+
 ## v0.1.10 — 2026-11-15
 
 - Logo cambiado al boleto de parley (la opción elegida): muescas, línea de corte, talón con punto verde y el 507

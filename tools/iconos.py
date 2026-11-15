@@ -1,10 +1,11 @@
 """Genera los íconos del logo (SVG y PNG) en la raíz del repositorio, para la pestaña y la pantalla de inicio.
 
-Uso (solo cuando cambia el logo):  uv run --with pillow python tools/iconos.py
+Uso (cuando cambia el logo o la versión):  uv run --with pillow python tools/iconos.py
 Dibuja la misma geometría de src/psa/marca.py; se pinta a 4x y se reduce para suavizar bordes.
 """
 import json
 import sys
+import tomllib
 from pathlib import Path
 
 from PIL import Image, ImageDraw
@@ -44,13 +45,15 @@ def main() -> None:
     png(192, RAIZ / "icono-192.png")
     png(512, RAIZ / "icono-512.png")
     png(512, RAIZ / "icono-maskable-512.png", margen=0.1)
+    # La versión va en las direcciones para que el navegador no se quede con íconos viejos en caché.
+    v = tomllib.loads((RAIZ / "pyproject.toml").read_text(encoding="utf-8"))["project"]["version"]
     manifiesto = {
         "name": "Parley507", "short_name": "Parley507", "lang": "es", "start_url": "./", "scope": "./",
         "display": "standalone", "background_color": "#EDF0F3", "theme_color": "#16202C",
-        "icons": [{"src": "icono-192.png", "sizes": "192x192", "type": "image/png"},
-                  {"src": "icono-512.png", "sizes": "512x512", "type": "image/png"},
-                  {"src": "icono-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
-                  {"src": "icono.svg", "sizes": "any", "type": "image/svg+xml"}]}
+        "icons": [{"src": f"icono-192.png?v={v}", "sizes": "192x192", "type": "image/png"},
+                  {"src": f"icono-512.png?v={v}", "sizes": "512x512", "type": "image/png"},
+                  {"src": f"icono-maskable-512.png?v={v}", "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+                  {"src": f"icono.svg?v={v}", "sizes": "any", "type": "image/svg+xml"}]}
     (RAIZ / "manifest.webmanifest").write_text(json.dumps(manifiesto, ensure_ascii=False, indent=1), encoding="utf-8")
     print("Íconos y manifiesto escritos en", RAIZ)
 
