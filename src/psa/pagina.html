@@ -23,12 +23,14 @@
   --pos:#0E7A5A; --neg:#B5473A; --duda:#9A5B00;
   --cond:"Barlow Condensed","Arial Narrow",sans-serif; --texto:"Barlow",system-ui,sans-serif;
   --logo-fondo:#16202C;
+  --panama-azul:#0B3D91; --panama-rojo:#D21034; --panama-blanco:transparent; --panama-blanco-borde:1.6px #16202C; --panama-blanco-respaldo:#16202C;
 }
 @media (prefers-color-scheme:dark){:root{
   --fondo:#121B27; --bloque:#1A2534; --tinta:#E6ECF3; --suave:#93A1B3; --regla:#2A374A; --pista:#253245;
   --over:#3DBB8C; --under:#7C9CFF; --reloj:#F0B429; --reloj-tinta:#121B27; --vivo:#FB7A3C;
   --pos:#3DBB8C; --neg:#F07D6B; --duda:#F0B429;
   --logo-fondo:#26354B;
+  --panama-azul:#4F8BFF; --panama-rojo:#F0475E; --panama-blanco:#FFFFFF; --panama-blanco-borde:0 transparent; --panama-blanco-respaldo:#FFFFFF;
 }}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -39,14 +41,16 @@ a{color:inherit}
 
 /* Cabecera: el nombre como rótulo de camiseta; el estado del día en pares dato-valor. */
 header{padding:18px 0 10px}
-/* Marca: el logo y el nombre. "parley" inclinado como rotulación deportiva; "507" (código de Panamá) en números
-   delineados, como el dorsal de una camiseta. */
+/* Marca: el logo (P con balón y barra) y el nombre. "parley" inclinado como rotulación deportiva; "507" (código de
+   Panamá) con los colores de la bandera: 5 azul, 0 blanco (delineado en modo claro para que no se pierda), 7 rojo. */
 .marca{display:flex;align-items:center;gap:12px}
 .marca svg{width:48px;height:48px;flex:none}
 .marca h1{margin:0;display:flex;align-items:baseline;line-height:.9}
 .parley{font:italic 800 40px/.9 var(--cond);letter-spacing:-.5px}
-.dorsal{font:italic 800 40px/.9 var(--cond);letter-spacing:1px;margin-left:3px;color:var(--tinta)}
-@supports (-webkit-text-stroke:1px black){.dorsal{color:transparent;-webkit-text-stroke:1.6px var(--tinta)}}
+.dorsal{font:italic 800 40px/.9 var(--cond);letter-spacing:.5px;margin-left:3px}
+.dorsal .d5{color:var(--panama-azul)} .dorsal .d7{color:var(--panama-rojo)}
+.dorsal .d0{color:var(--panama-blanco-respaldo)}
+@supports (-webkit-text-stroke:1px black){.dorsal .d0{color:var(--panama-blanco);-webkit-text-stroke:var(--panama-blanco-borde)}}
 .version{font:500 15px/1 var(--cond);color:var(--suave);align-self:flex-end;margin-bottom:2px}
 .estado{display:flex;flex-wrap:wrap;gap:4px 18px;margin:10px 0 0;font-size:13px}
 .estado div{display:flex;gap:6px}
@@ -161,7 +165,7 @@ input{flex:1}
 </head>
 <body>
 <header class="envoltura">
-  <div class="marca">__LOGO__<h1 aria-label="parley507"><span class="parley">parley</span><span class="dorsal">507</span></h1><span class="version">v__VERSION__</span></div>
+  <div class="marca">__LOGO__<h1 aria-label="parley507"><span class="parley">parley</span><span class="dorsal"><span class="d5">5</span><span class="d0">0</span><span class="d7">7</span></span></h1><span class="version">v__VERSION__</span></div>
   <dl class="estado" id="estado"></dl>
 </header>
 <nav><div class="envoltura" id="tabs" role="tablist"></div></nav>

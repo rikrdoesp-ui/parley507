@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.9 — 2026-11-15
+
+- Logo nuevo, elegido entre cinco opciones: una P cuyo tallo es la barra de probabilidad y cuya panza es un balón.
+- "507" con los colores de la bandera de Panamá: 5 azul, 0 blanco (delineado en modo claro), 7 rojo.
+- Íconos de pestaña y pantalla de inicio regenerados con el logo nuevo.
+
 ## v0.1.8 — 2026-11-15
 
 - Logo: la trayectoria de un tiro en puntos, el balón y la barra de probabilidad de la página
