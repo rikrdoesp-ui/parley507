@@ -1,4 +1,4 @@
-"""Página estática para el celular (GitHub Pages, carpeta docs/): foto del día, solo lectura.
+"""Página estática para el celular (GitHub Pages, raíz del repositorio): foto del día, solo lectura.
 
 Se regenera en cada actualización y se sube con git. El repositorio es público: no se incluyen rutas locales
 ni el registro de apuestas, solo proyecciones, lesiones, líneas del día y el resumen del backtest.
@@ -17,7 +17,7 @@ from .nba import lesiones, proyeccion
 from .nba import props as props_nba
 
 RAIZ = Path(__file__).resolve().parents[2]
-DESTINO = RAIZ / "docs" / "index.html"
+DESTINO = RAIZ / "index.html"  # GitHub Pages publica desde la raíz de main.
 CORTOS = {"puntos": "pts", "rebotes": "reb", "asistencias": "ast"}
 
 
@@ -106,11 +106,11 @@ def generar(con, fecha: str, destino: Path = DESTINO) -> Path:
 
 
 def publicar(fecha: str, raiz: Path = RAIZ) -> str:
-    """Commit solo de docs/ y push. No toca otros cambios que haya en el repositorio."""
+    """Commit solo de la página y push. No toca otros cambios que haya en el repositorio."""
     def git(*args):
         return subprocess.run(["git", "-C", str(raiz), *args], capture_output=True, text=True, timeout=120)
 
-    rutas = ["docs/index.html", "docs/.nojekyll"]
+    rutas = ["index.html", ".nojekyll"]
     git("add", *rutas)
     if git("diff", "--cached", "--quiet", "--", *rutas).returncode == 0:
         return "La página no cambió; no hay nada que subir."

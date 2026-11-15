@@ -1,7 +1,7 @@
 """Actualización completa: datos NBA, lesiones, referencias de /parley, proyecciones del día y export.
 
 Uso: uv run actualizar [--fecha AAAA-MM-DD] [--sin-ot] [--sin-publicar]
-Al final regenera docs/index.html (página para el celular) y la sube a GitHub Pages.
+Al final regenera index.html (página para el celular) y la sube a GitHub Pages.
 El botón "Actualizar datos" de la app ejecuta esta misma función.
 """
 import argparse
@@ -59,7 +59,7 @@ def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publi
 
 
 def publicar_pagina(con, fecha: str, resumen: dict, subir: bool = True) -> dict:
-    """Regenera docs/index.html y, si `subir`, la publica con git. Un fallo de red no rompe la actualización."""
+    """Regenera index.html y, si `subir`, la publica con git. Un fallo de red no rompe la actualización."""
     resumen["pagina"] = str(pagina.generar(con, fecha))
     if subir:
         resumen["publicacion"] = pagina.publicar(fecha)

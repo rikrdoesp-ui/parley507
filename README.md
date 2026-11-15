@@ -41,7 +41,7 @@ uv run pytest
 
 ## Página para el celular
 
-`actualizar` (y los botones de la página Hoy) generan `docs/index.html` y lo suben a GitHub, que lo publica con
+`actualizar` (y los botones de la página Hoy) generan `index.html` (raíz del repositorio) y lo suben a GitHub, que lo publica con
 GitHub Pages en https://rikrdoesp-ui.github.io/parley507/. Es una foto de solo lectura de la última actualización:
 partidos, proyecciones por jugador, líneas, lesiones y backtest. El repositorio es público, así que la página también.
 Para no subirla: `uv run actualizar --sin-publicar`.
