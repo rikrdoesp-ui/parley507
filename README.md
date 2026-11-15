@@ -1,4 +1,6 @@
-# Panama Sports Analytics
+# parley507 — Panama Sports Analytics
+
+Analiza los mercados para hacer el mejor parley.
 
 Proyecciones propias de player props NBA que alimentan a la skill `/parley`. Uso personal.
 Especificación: `PANAMA_FOOTBALL_ANALYTICS_PRO_MASTER_SPEC.md` (v1.1, en Descargas). Esta es la **v0.1**: base + NBA.
