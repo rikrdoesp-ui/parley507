@@ -13,8 +13,8 @@ def evaluar(pred: pd.DataFrame, props: pd.DataFrame, escenario: str = "base") ->
     filas = []
     for p in props.itertuples():
         clave = (p.player_id, p.market)
-        base = {"jugador": p.player_name, "mercado": p.market, "línea": p.line, "casa": p.bookmaker,
-                "origen": p.entry_method}
+        base = {"player_id": p.player_id, "jugador": p.player_name, "mercado": p.market, "línea": p.line,
+                "casa": p.bookmaker, "origen": p.entry_method}
         if pd.isna(p.player_id) or clave not in proy.index:
             filas.append({**base, "estado de datos": "sin proyección (jugador no identificado o fuera)"})
             continue

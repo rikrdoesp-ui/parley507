@@ -6,14 +6,14 @@ ni el registro de apuestas, solo proyecciones, lesiones, líneas del día y el r
 import json
 import math
 import subprocess
-from datetime import datetime
+from datetime import date, datetime
 from pathlib import Path
 
 import pandas as pd
 
 from . import config
 from .db import clave_nombre
-from .nba import lesiones, proyeccion
+from .nba import lesiones, modelo, proyeccion
 from .nba import props as props_nba
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -38,6 +38,36 @@ def hora_panama(utc) -> str:
     return datetime.fromisoformat(str(utc).replace("Z", "+00:00")).astimezone(config.PANAMA).strftime("%H:%M")
 
 
+def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -> dict:
+    """Promedios, línea (real o de referencia), probabilidad, lado del modelo y aciertos L10 de un prop.
+
+    `valores`: del partido más reciente al más viejo. Sin línea real, la referencia es la media L10 redondeada
+    a x.5 y se marca como tal: sirve para ver qué lado favorece el modelo, no como precio.
+    """
+    media = lambda v: round(sum(v) / len(v), 1) if v else None
+    l10 = media(valores[:10])
+    salida = {"l5": media(valores[:5]), "l10": l10, "temp": media(temporada), "media": limpio(mu, 1)}
+    if real:
+        linea, salida["tipo"], salida["casa"] = real["línea"], "real", real["casa"]
+    elif l10 is not None:
+        linea, salida["tipo"] = math.floor(l10) + 0.5, "ref"
+    else:
+        return salida
+    salida["linea"] = linea
+    if mu is None or pd.isna(mu):
+        return salida
+    po, pu = float(modelo.p_over(mu, k, linea)), float(modelo.p_under(mu, k, linea))
+    lado = "over" if po >= pu else "under"
+    ultimos = valores[:10]
+    aciertos = sum((v > linea) if lado == "over" else (v < linea) for v in ultimos)
+    salida.update({"p_over": round(po, 3), "lado": lado, "p_lado": round(max(po, pu), 3),
+                   "aciertos": [int(aciertos), len(ultimos)]})
+    if real:
+        salida.update({"edge": limpio(real.get(f"edge {lado}")), "ve": limpio(real.get(f"VE {lado}")),
+                       "cuota": limpio(real.get(f"cuota {lado}"), 2), "origen": real["origen"]})
+    return salida
+
+
 def datos(con, fecha: str) -> dict:
     juegos = pd.read_sql("""SELECT g.game_id, g.start_time_utc, a.abbreviation || ' @ ' || h.abbreviation AS partido,
                               g.status, g.away_score, g.home_score FROM games g
@@ -49,17 +79,38 @@ def datos(con, fecha: str) -> dict:
 
     estados = lesiones.vigentes(con, fecha)
     estado = dict(zip(estados.clave, estados.status)) if not estados.empty else {}
+
+    props = pd.read_sql("SELECT * FROM player_props WHERE game_date = ?", con, params=(fecha,))
+    tabla = props_nba.evaluar(pred, props) if not (pred.empty or props.empty) else pd.DataFrame()
+    lineas = [{k: limpio(v) for k, v in fila.items()} for fila in tabla.to_dict("records")]
+    # Línea real por jugador y mercado: la de una casa (manual) manda sobre el consenso de referencia.
+    reales = {}
+    for fila in sorted(lineas, key=lambda f: f["origen"] != "PARLEY_REF"):
+        if fila.get("P over") is not None and fila.get("player_id") is not None:
+            reales[(int(fila["player_id"]), fila["mercado"])] = fila
+
     jugadores = []
     if not pred.empty:
+        hist = proyeccion.historial(con)
+        hist = hist[hist.game_date < fecha].sort_values("game_date", ascending=False)
+        temporada = config.temporada_actual(date.fromisoformat(fecha))
+        previos = {pid: g for pid, g in hist[hist.player_id.isin(pred.player_id.unique())].groupby("player_id")}
         ancho = {}
         for r in pred.itertuples():
             clave = (r.player_id, r.scenario)
             fila = ancho.setdefault(clave, {"j": r.jugador, "eq": r.equipo, "p": nombres.get(r.game_id, ""),
                                             "esc": r.scenario, "min": limpio(r.minutes, 1),
                                             "sd": limpio(r.minutes_sd, 1), "n": limpio(r.sample_games),
-                                            "notas": r.notes or "", "m": {}})
+                                            "notas": r.notes or "", "m": {}, "props": {}})
             fila["m"][CORTOS[r.market]] = [limpio(r.projected_mean, 1), limpio(r.lower_interval, 0),
                                            limpio(r.upper_interval, 0)]
+            if r.scenario == "base":
+                g = previos.get(r.player_id, hist.iloc[:0])
+                stat = config.MERCADOS_NBA[r.market]
+                fila["props"][CORTOS[r.market]] = analizar_mercado(
+                    g[stat].dropna().tolist(), g[g.season == temporada][stat].dropna().tolist(),
+                    None if pd.isna(r.projected_mean) else r.projected_mean, r.dispersion,
+                    reales.get((int(r.player_id), r.market)))
         for (pid, esc), fila in ancho.items():
             if esc != "base":
                 continue
@@ -74,10 +125,6 @@ def datos(con, fecha: str) -> dict:
         {"j": r.player_name, "eq": equipos.get(r.team_id, "") if pd.notna(r.team_id) else "", "est": r.status,
          "motivo": r.reason or "", "manual": bool(r.manual)}
         for r in estados.sort_values(["team_id", "player_name"]).itertuples()]
-
-    props = pd.read_sql("SELECT * FROM player_props WHERE game_date = ?", con, params=(fecha,))
-    tabla = props_nba.evaluar(pred, props) if not (pred.empty or props.empty) else pd.DataFrame()
-    lineas = [{k: limpio(v) for k, v in fila.items()} for fila in tabla.to_dict("records")]
 
     corrida = con.execute("SELECT metrics_json, created_at FROM model_runs ORDER BY run_id DESC LIMIT 1").fetchone()
     backtest = {**json.loads(corrida[0]), "fecha": corrida[1][:10]} if corrida else None
@@ -163,6 +210,17 @@ table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:right;padding:6px 4px;border-bottom:1px solid var(--line)}
 th:first-child,td:first-child{text-align:left}
 .pos{color:var(--ok)}.neg{color:var(--bad)}
+a.juego{color:inherit;text-decoration:none;display:flex}
+a.juego:active{background:var(--chip)}
+.volver{display:inline-block;color:var(--accent);text-decoration:none;padding:4px 0 8px;font-size:15px}
+h2{font-size:19px;margin:2px 0}
+h3{font-size:16px;margin:18px 0 8px}
+table.props{margin-top:8px;font-size:12.5px}
+table.props td,table.props th{padding:5px 3px;vertical-align:top}
+table.props td div{font-size:11px}
+.mejor{padding:8px 0;border-top:1px solid var(--line)}
+.mejor:first-of-type{border-top:0}
+.badge.real{background:var(--accent);color:#fff}
 .vacio{color:var(--muted);text-align:center;padding:30px 0}
 </style>
 </head>
@@ -185,15 +243,31 @@ const signo = x => x === null || x === undefined ? '' : x > 0 ? 'pos' : 'neg';
 document.getElementById('sub').textContent =
   `NBA · ${D.fecha} · actualizado ${D.generado} (Panamá)` + (D.reporte_lesiones ? ` · lesiones ${D.reporte_lesiones}` : '');
 
-function stat(nombre, v) {
-  return el('div', {class: 'stat'}, el('b', {}, v ? num(v[0]) : '—'), el('span', {}, v ? `${nombre} ${num(v[1], 0)}-${num(v[2], 0)}` : nombre));
+const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asist.'};
+const lado = p => p.lado === 'over' ? 'Over' : 'Under';
+function celdaModelo(p) {
+  if (!p.lado) return el('td', {}, '—');
+  return el('td', {class: p.edge > 0 ? 'pos' : ''}, el('b', {}, `${lado(p)} ${pct(p.p_lado).replace(' %', '%')}`),
+    p.edge !== null && p.edge !== undefined ? el('div', {class: signo(p.edge)}, `edge ${p.edge > 0 ? '+' : ''}${(p.edge * 100).toFixed(1)}`) : '');
+}
+function tablaProps(j) {
+  return el('table', {class: 'props'},
+    el('tr', {}, el('th', {}, 'Prop'), el('th', {}, 'L5'), el('th', {}, 'L10'), el('th', {}, 'Temp'), el('th', {}, 'Proy'),
+      el('th', {}, 'Línea'), el('th', {}, 'Modelo')),
+    ...['pts', 'reb', 'ast'].map(k => {
+      const p = j.props[k] || {};
+      return el('tr', {}, el('td', {}, NOMBRES[k]), el('td', {}, num(p.l5)), el('td', {}, num(p.l10)), el('td', {}, num(p.temp)),
+        el('td', {}, el('b', {}, num(p.media))),
+        el('td', {}, p.linea === undefined ? '—' : num(p.linea) + (p.tipo === 'ref' ? '*' : ''),
+          p.aciertos ? el('div', {class: 'muted'}, `${p.aciertos[0]}/${p.aciertos[1]}`) : ''),
+        celdaModelo(p));
+    }));
 }
 function tarjetaJugador(j) {
   const c = el('div', {class: 'card'},
     el('div', {class: 'fila'}, el('span', {class: 'nombre'}, j.j), j.est ? el('span', {class: 'badge ' + j.est}, j.est) : ''),
-    el('div', {class: 'muted'}, `${j.eq} · ${j.p} · ${num(j.min)} min` + (j.sd ? ` (desv. ${num(j.sd)})` : '') + ` · ${j.n} partidos`),
-    el('div', {class: 'stats'}, el('div', {class: 'stat'}, el('b', {}, num(j.min)), el('span', {}, 'minutos')),
-      stat('pts', j.m.pts), stat('reb', j.m.reb), stat('ast', j.m.ast)));
+    el('div', {class: 'muted'}, `${j.eq} · ${j.p} · ${num(j.min)} min proyectados` + (j.sd ? ` (desv. ${num(j.sd)})` : '') + ` · ${j.n} partidos`),
+    tablaProps(j));
   if (j.otros.length) {
     const d = el('details', {}, el('summary', {}, `Escenarios (${j.otros.length})`));
     for (const o of j.otros) d.append(el('div', {class: 'muted'},
@@ -205,12 +279,52 @@ function tarjetaJugador(j) {
   return c;
 }
 
+const NOTA_LINEA = '* Línea de referencia (media L10 redondeada), sin cuota: indica el lado que favorece el modelo, no si hay valor. '
+  + 'Edge solo con línea real. x/10: veces que superó (over) o no llegó (under) a la línea en sus últimos 10. BET/PASS lo decide /parley.';
+
+// Mejores props del partido: primero las de línea real con edge a favor; luego, con línea de referencia,
+// las de mayor probabilidad entre jugadores de rotación (20+ min), para no premiar unders de suplentes.
+function mejoresProps(jugadores) {
+  const todas = [];
+  for (const j of jugadores) for (const k of ['pts', 'reb', 'ast']) {
+    const p = j.props[k];
+    if (!p || !p.lado || j.notas.includes('muestra insuficiente')) continue;
+    if (p.tipo === 'ref' && (j.min || 0) < 20) continue;
+    todas.push({j, k, p, orden: p.tipo === 'real' ? [0, -(p.edge ?? -1)] : [1, -p.p_lado]});
+  }
+  return todas.filter(x => x.p.tipo === 'ref' || x.p.edge > 0)
+    .sort((a, b) => a.orden[0] - b.orden[0] || a.orden[1] - b.orden[1]).slice(0, 8);
+}
+function vistaJuego(nombre) {
+  const p = D.partidos.find(x => x.p === nombre);
+  const jug = D.jugadores.filter(j => j.p === nombre);
+  const out = [el('a', {href: '#', class: 'volver'}, '← Partidos'),
+    el('h2', {}, nombre), el('div', {class: 'muted'}, p ? `${p.hora} (Panamá) · ${p.estado}${p.marcador ? ' · ' + p.marcador : ''}` : '')];
+  if (!jug.length) return out.concat(el('p', {class: 'vacio'}, 'Sin proyecciones para este partido.'));
+  const mejores = mejoresProps(jug);
+  const caja = el('div', {class: 'card'}, el('div', {class: 'nombre'}, 'Mejores props del partido'));
+  if (!mejores.length) caja.append(el('div', {class: 'muted'}, 'Ninguna prop destaca.'));
+  for (const {j, k, p} of mejores) caja.append(el('div', {class: 'mejor'},
+    el('div', {class: 'fila'}, el('span', {}, el('b', {}, j.j), ` ${NOMBRES[k]} ${lado(p)} ${num(p.linea)}`),
+      el('span', {class: 'badge ' + (p.tipo === 'real' ? 'real' : '')}, p.tipo === 'real' ? 'línea real' : 'referencia')),
+    el('div', {class: 'muted'}, `Modelo ${pct(p.p_lado)} · proy ${num(p.media)} · L10 ${num(p.l10)} · ${p.aciertos[0]}/${p.aciertos[1]}`
+      + (p.edge !== undefined && p.edge !== null ? ` · edge +${(p.edge * 100).toFixed(1)}` : '')
+      + (p.cuota && p.origen !== 'PARLEY_REF' ? ` · cuota ${num(p.cuota, 2)}` : '')
+      + (j.est ? ` · ⚠ ${j.est}` : '') + (j.sd > 6 ? ' · ⚠ minutos inestables' : ''))));
+  out.push(caja, el('p', {class: 'muted'}, NOTA_LINEA));
+  for (const equipo of [...new Set(jug.map(j => j.eq))]) {
+    out.push(el('h3', {}, equipo), ...jug.filter(j => j.eq === equipo).map(tarjetaJugador));
+  }
+  return out;
+}
+
 const vistas = {
   Partidos() {
     if (!D.partidos.length) return [el('p', {class: 'vacio'}, 'Sin partidos NBA este día.')];
-    return D.partidos.map(p => el('div', {class: 'card fila'},
-      el('span', {}, el('span', {class: 'nombre'}, p.p), el('div', {class: 'muted'}, p.estado + (p.marcador ? ' · ' + p.marcador : ''))),
-      el('span', {class: 'badge'}, p.hora)));
+    return [el('p', {class: 'muted'}, 'Toca un partido para ver sus props.'),
+      ...D.partidos.map(p => el('a', {class: 'card fila juego', href: '#juego=' + encodeURIComponent(p.p)},
+        el('span', {}, el('span', {class: 'nombre'}, p.p), el('div', {class: 'muted'}, p.estado + (p.marcador ? ' · ' + p.marcador : ''))),
+        el('span', {class: 'badge'}, p.hora + ' ›')))];
   },
   Jugadores() {
     const buscar = el('input', {type: 'search', placeholder: 'Buscar jugador', 'aria-label': 'Buscar jugador'});
@@ -278,20 +392,33 @@ const vistas = {
   },
 };
 const tabs = document.getElementById('tabs'), vista = document.getElementById('vista');
-let actual = 'Jugadores';
+let actual = 'Partidos';
 function mostrar(nombre) {
   actual = nombre;
   for (const b of tabs.children) b.setAttribute('aria-selected', b.textContent === nombre);
   vista.replaceChildren(...vistas[nombre]());
   try { localStorage.setItem('pestana', nombre); } catch (e) {}
 }
+// #juego=NOMBRE abre un partido; así el botón "atrás" del celular vuelve a la lista.
+function ruta() {
+  const m = location.hash.match(/^#juego=(.+)$/);
+  if (m) {
+    for (const b of tabs.children) b.setAttribute('aria-selected', b.textContent === 'Partidos');
+    vista.replaceChildren(...vistaJuego(decodeURIComponent(m[1])));
+    scrollTo(0, 0);
+  } else {
+    mostrar(actual);
+  }
+}
 for (const nombre of Object.keys(vistas)) {
   const b = el('button', {role: 'tab'}, nombre);
-  b.addEventListener('click', () => mostrar(nombre));
+  b.addEventListener('click', () => { actual = nombre; location.hash ? (location.hash = '') : mostrar(nombre); });
   tabs.append(b);
 }
 let guardada = null; try { guardada = localStorage.getItem('pestana'); } catch (e) {}
-mostrar(vistas[guardada] ? guardada : actual);
+if (vistas[guardada]) actual = guardada;
+addEventListener('hashchange', ruta);
+ruta();
 </script>
 </body>
 </html>
