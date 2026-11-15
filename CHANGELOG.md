@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.7 — 2026-11-15
+
+- Spread estimado propio por partido (fuerza reciente de cada equipo + localía, solo con partidos anteriores):
+  correlación 0,45 con el margen real. Se muestra el favorito en cada partido.
+- Aviso de riesgo de paliza a titulares (28+ min) con spread estimado de 12 o más.
+- Probado y descartado: quitar minutos a titulares según el spread. El efecto real es de ~1,4 min con spread 16+
+  y no mejora el Brier en 2025-26 ni en 2026-27; el ancla al mercado ya recoge el spread de Stake.
+
 ## v0.1.6 — 2026-11-15
 
 - Rediseño de la página del celular: tema de arena (concreto y tinta azul noche, over en verde duela, under en

@@ -99,6 +99,19 @@ def test_efecto_de_uso_va_al_que_mas_produce_y_tiene_tope():
     assert todo[1]["points"] <= sin[1]["points"] * (1 + modelo.TOPE_AUMENTO_USO) + 1e-9
 
 
+def test_spread_estimado_sin_fuga_y_con_localia():
+    juegos = pd.DataFrame({"game_id": ["G1", "G2", "G3"], "game_date": ["2026-01-01", "2026-01-02", "2026-01-03"],
+                           "home_team_id": [1, 1, 2], "away_team_id": [2, 2, 1],
+                           "home_score": [120, 110, None], "away_score": [100, 100, None]})
+    m = modelo.margenes_esperados(juegos).set_index(["game_id", "team_id"]).margen
+    assert m[("G1", 1)] == pytest.approx(modelo.VENTAJA_LOCAL)  # Sin historia: solo la localía.
+    assert m[("G1", 1)] == pytest.approx(-m[("G1", 2)])
+    assert m[("G3", 1)] > 0  # El equipo 1 ganó sus dos partidos previos: favorito aun de visita.
+    cambiado = juegos.copy()
+    cambiado.loc[1, "home_score"] = 200  # El resultado de G2 no cambia el spread de G2.
+    assert modelo.margenes_esperados(cambiado).set_index(["game_id", "team_id"]).margen[("G2", 1)] == pytest.approx(m[("G2", 1)])
+
+
 def test_redistribuir_no_infla_a_un_suplente():
     # Tres bajas que liberan 90 minutos: nadie gana más del máximo, aunque sobren minutos.
     nuevos = modelo.redistribuir({1: 34, 2: 30, 3: 26, 4: 30, 5: 12}, {1, 2, 3})

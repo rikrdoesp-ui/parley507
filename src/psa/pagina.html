@@ -263,7 +263,8 @@ function vistaJuego(nombre) {
   const jug = D.jugadores.filter(j => j.p === nombre);
   const out = [el('a', {href: '#', class: 'volver'}, 'Volver a partidos'),
     el('div', {class: 'titulo-juego'}, cruce(nombre), p ? reloj(p) : ''),
-    p ? el('div', {class: 'suave pequeno'}, `${p.hora} hora de Panamá`, p.marcador ? `, final ${p.marcador}` : '') : ''];
+    p ? el('div', {class: 'suave pequeno'}, `${p.hora} hora de Panamá`, p.marcador ? `, final ${p.marcador}` : '',
+      p.favorito ? `. Favorito ${p.favorito} (spread estimado)` : '') : ''];
   if (!jug.length) return out.concat(el('p', {class: 'vacio'}, 'No hay proyecciones para este partido.'));
   const mejores = mejoresProps(jug);
   out.push(el('h2', {class: 'seccion'}, 'Lo que el modelo empuja'));
@@ -273,7 +274,8 @@ function vistaJuego(nombre) {
   for (const {j, k, p: q} of mejores) out.push(filaProp({jugador: j.j, lado: q.lado, linea: q.linea, prob: q.p_lado,
     mercado: q.p_mercado, cuota: q.tipo === 'real' && !String(q.casa).startsWith('Consenso') ? q.cuota : null, valor: q.ve,
     media: q.media, minutos: j.min, etiqueta: NOMBRES[k].toLowerCase() + (q.tipo === 'ref' ? '*' : ''),
-    notas: [['Out', 'Doubtful', 'Questionable'].includes(j.est) ? j.est : '', j.sd > 6 ? 'minutos inestables' : ''].filter(Boolean).join(', ')}));
+    notas: [['Out', 'Doubtful', 'Questionable'].includes(j.est) ? j.est : '', j.sd > 6 ? 'minutos inestables' : '',
+      j.notas.includes('riesgo de paliza') ? 'riesgo de paliza' : ''].filter(Boolean).join(', ')}));
   out.push(el('p', {class: 'nota'}, 'Con línea real, la probabilidad parte del mercado sin margen (la marca fina de la barra) y el modelo la mueve como mucho 4 puntos, porque todavía no le gana al mercado. VE es esa probabilidad por la cuota, menos 1. Con * la línea es de referencia (media de los últimos 10, sin cuota): solo indica hacia dónde se inclina el modelo. BET o PASS lo decide /parley.'));
   for (const equipo of [...new Set(jug.map(j => j.eq))])
     out.push(el('h2', {class: 'equipo'}, equipo), ...jug.filter(j => j.eq === equipo).map(fichaJugador));
@@ -286,6 +288,7 @@ const vistas = {
     return [el('div', {}, ...D.partidos.map(p => el('a', {class: 'partido', href: '#juego=' + encodeURIComponent(p.p)},
       cruce(p.p), reloj(p),
       el('div', {class: 'detalle'}, el('span', {}, `${p.hora} hora de Panamá`), p.marcador ? el('span', {}, `Final ${p.marcador}`) : '',
+        p.favorito ? el('span', {}, `Favorito ${p.favorito}`) : '',
         el('span', {}, `${D.jugadores.filter(j => j.p === p.p).length} jugadores`))))),
       el('p', {class: 'nota'}, 'Toca un partido para ver a cada jugador y lo que el modelo empuja.')];
   },
@@ -326,7 +329,8 @@ const vistas = {
             el('span', {class: 'mejor'}, `Más probable: ${m.p.jugador} ${num(m.p['línea'])}, ${pct(m.prob)}`)),
           ...filas.map(f => filaProp({jugador: f.p.jugador, lado, linea: f.p['línea'], prob: f.prob, mercado: f.mercado,
             cuota: f.cuota, valor: f.valor, media: f.p.media, minutos: f.p.minutos,
-            notas: (f.p.riesgos || '').includes('inestables') ? 'minutos inestables' : ''}))));
+            notas: [(f.p.riesgos || '').includes('inestables') ? 'minutos inestables' : '',
+              (f.p.riesgos || '').includes('riesgo de paliza') ? 'riesgo de paliza' : ''].filter(Boolean).join(', ')}))));
       }
       const sin = lista.filter(p => vacio(p['P over']));
       if (sin.length) bloque.append(el('p', {class: 'nota'}, `Sin proyección: ${sin.map(p => `${p.jugador} (${p.mercado})`).join(', ')}.`));

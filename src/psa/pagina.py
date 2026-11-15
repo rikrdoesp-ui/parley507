@@ -89,12 +89,21 @@ def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -
     return salida
 
 
+def favorito(partido: str, margen_local) -> str:
+    """'SAS por 20' con el spread estimado propio; vacío si no hay dato o es parejo."""
+    if margen_local is None or pd.isna(margen_local) or abs(margen_local) < 1:
+        return "parejo" if margen_local is not None and not pd.isna(margen_local) else ""
+    visita, _, local = partido.partition(" @ ")
+    return f"{local if margen_local > 0 else visita} por {abs(margen_local):.0f}"
+
+
 def datos(con, fecha: str) -> dict:
     juegos = pd.read_sql("""SELECT g.game_id, g.start_time_utc, a.abbreviation || ' @ ' || h.abbreviation AS partido,
-                              g.status, g.away_score, g.home_score FROM games g
+                              g.status, g.away_score, g.home_score, g.home_team_id FROM games g
                             JOIN teams h ON h.team_id = g.home_team_id JOIN teams a ON a.team_id = g.away_team_id
                             WHERE g.game_date = ? ORDER BY g.start_time_utc""", con, params=(fecha,))
     nombres = dict(zip(juegos.game_id, juegos.partido))
+    spreads = proyeccion.spreads_estimados(con)
     equipos = dict(con.execute("SELECT team_id, abbreviation FROM teams"))
     pred = proyeccion.ultimas(con, fecha)
 
@@ -159,6 +168,7 @@ def datos(con, fecha: str) -> dict:
         "modelo": config.MODELO_NBA, "corte": limpio(pred.data_cutoff.max()) if not pred.empty else None,
         "reporte_lesiones": reporte,
         "partidos": [{"hora": hora_panama(r.start_time_utc), "p": r.partido, "estado": r.status,
+                      "favorito": favorito(r.partido, spreads.get((r.game_id, r.home_team_id))),
                       "inicio": r.start_time_utc if isinstance(r.start_time_utc, str) else None,
                       "marcador": f"{int(r.away_score)}-{int(r.home_score)}" if pd.notna(r.away_score) else ""}
                      for r in juegos.itertuples()],

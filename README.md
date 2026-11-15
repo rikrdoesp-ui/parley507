@@ -81,6 +81,9 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
    (una sola cuota), como en /parley. El peso se recalibrará con 100 legs comparables. La del modelo se sigue mostrando.
 6. Menos de 5 partidos previos = "muestra insuficiente", sin proyección.
 
+Spread y palizas: cada partido muestra un spread estimado propio y los titulares de partidos con spread de 12 o más
+llevan un aviso de riesgo de paliza. No se les quitan minutos: se probó en el backtest y no mejoraba.
+
 Limitaciones conocidas: el efecto de uso es un promedio y se queda corto cuando faltan varios del mismo puesto; no modela rival, ritmo, descanso, blowout ni cambios
 de equipo; la titularidad histórica es desconocida (NULL). Solo temporada regular: en playoffs no hay box scores
 nuevos, así que desde la segunda ronda no habrá proyecciones hasta añadir ese tipo de temporada.

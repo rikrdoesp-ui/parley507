@@ -128,3 +128,33 @@ def ajustar_ausencias(presentes: dict, ausentes: dict, alfa: float, fraccion: fl
             extra = alfa * hueco * rotacion[p] / total if p in rotacion and total else 0.0
             medias[p][stat] = mu + min(extra, TOPE_AUMENTO_USO * mu)
     return minutos, medias
+
+
+VIDA_FUERZA = 15  # Partidos de vida media para la fuerza de un equipo (margen de puntos reciente).
+VENTAJA_LOCAL = 2.5
+
+
+def margenes_esperados(juegos: pd.DataFrame) -> pd.DataFrame:
+    """Margen esperado de cada equipo en cada partido, solo con partidos anteriores (spread estimado propio).
+
+    juegos: game_id, game_date, home_team_id, away_team_id, home_score, away_score (NaN si no se ha jugado).
+    Devuelve game_id, team_id y margen (positivo = favorito por esos puntos).
+    """
+    j = juegos.sort_values(["game_date", "game_id"])
+    local = pd.DataFrame({"game_id": j.game_id, "game_date": j.game_date, "team_id": j.home_team_id,
+                          "rival": j.away_team_id, "margen_real": j.home_score - j.away_score, "localia": 1.0})
+    visita = pd.DataFrame({"game_id": j.game_id, "game_date": j.game_date, "team_id": j.away_team_id,
+                           "rival": j.home_team_id, "margen_real": j.away_score - j.home_score, "localia": -1.0})
+    largo = pd.concat([local, visita]).sort_values(["team_id", "game_date", "game_id"]).reset_index(drop=True)
+    largo["fuerza"] = largo.groupby("team_id")["margen_real"].transform(
+        lambda s: s.shift().ewm(halflife=VIDA_FUERZA).mean()).fillna(0.0)
+    rival = largo[["game_id", "team_id", "fuerza"]].rename(columns={"team_id": "rival", "fuerza": "fuerza_rival"})
+    largo = largo.merge(rival, on=["game_id", "rival"])
+    largo["margen"] = largo.fuerza - largo.fuerza_rival + VENTAJA_LOCAL * largo.localia
+    return largo[["game_id", "team_id", "margen"]]
+
+
+
+UMBRAL_PALIZA = 12.0  # Spread estimado desde el que se avisa riesgo de paliza a los titulares.
+# Probado en el backtest (15-nov-2026): quitarles minutos según el spread no mejora el Brier en 2025-26 ni en
+# 2026-27 (efecto real ~1,4 min con spread 16+, y el spread previo anticipa mal las palizas). Por eso solo se avisa.

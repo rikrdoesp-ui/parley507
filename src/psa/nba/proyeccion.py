@@ -33,6 +33,13 @@ def ajuste_ausencias_vigente(con) -> tuple[float, float]:
     return params.get("fraccion_minutos", 0.0), params.get("alfa_uso", 0.0)
 
 
+def spreads_estimados(con) -> dict:
+    """{(game_id, team_id): margen esperado} con la fuerza reciente de cada equipo y la localía."""
+    g = pd.read_sql("""SELECT game_id, game_date, home_team_id, away_team_id, home_score, away_score FROM games
+                       WHERE season_type IN ('Regular', 'NBA Cup', 'Play-In', 'Playoffs')""", con)
+    return {(r.game_id, r.team_id): r.margen for r in modelo.margenes_esperados(g).itertuples()}
+
+
 def proyectar_dia(con, fecha: str) -> pd.DataFrame:
     juegos = pd.read_sql("""SELECT g.game_id, g.start_time_utc, g.status, g.home_team_id, g.away_team_id,
                               h.abbreviation AS local, a.abbreviation AS visita
@@ -76,6 +83,7 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
         "SELECT player_id, minutes, reason FROM minutes_overrides WHERE game_date = ?", (fecha,))}
 
     k, nota_k = k_vigente(con)
+    spreads = spreads_estimados(con)
     fraccion, alfa = ajuste_ausencias_vigente(con)
     filas = []
     for (_, equipo), g in df.groupby(["game_id", "team_id"]):
@@ -115,12 +123,15 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                     notas.append(f"ajuste por {len(nuevas) + (nombre != 'base')} baja(s) de rotación")
                 if pd.notna(r.min_sd) and r.min_sd > MINUTOS_INESTABLES:
                     notas.append(f"minutos inestables (desv. {r.min_sd:.1f})")
+                spread = spreads.get((r.game_id, r.team_id), 0.0)
+                if abs(spread) >= modelo.UMBRAL_PALIZA and mins.get(r.player_id, 0) >= 28:
+                    notas.append(f"riesgo de paliza (spread estimado {spread:+.0f})")
                 if r.n_previos < modelo.MUESTRA_MINIMA:
                     notas.append("muestra insuficiente")
                 fila = {"game_id": r.game_id, "game_date": fecha, "partido": r.partido, "hora_utc": r.start_time_utc,
                         "team_id": r.team_id, "equipo": r.equipo, "player_id": int(r.player_id), "jugador": r.jugador,
                         "estado": r.estado, "escenario": nombre, "minutos": mins[r.player_id], "min_sd": r.min_sd,
-                        "n_previos": int(r.n_previos), "data_cutoff": corte, "notas": "; ".join(notas)}
+                        "n_previos": int(r.n_previos), "data_cutoff": corte, "notas": "; ".join(notas), "spread": spread}
                 for stat in modelo.ESTADISTICAS:
                     mu = medias.get(r.player_id, {}).get(stat, np.nan)
                     bajo, alto = modelo.intervalo(mu, k[stat]) if pd.notna(mu) else (np.nan, np.nan)

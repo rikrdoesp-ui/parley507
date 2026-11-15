@@ -208,3 +208,4 @@ def main() -> None:
         r = correr(con)
     print(json.dumps({k: r[k] for k in ("metricas", "legs_reales", "k_final", "fraccion_minutos", "alfa_uso")},
                      indent=1, ensure_ascii=False))
+
