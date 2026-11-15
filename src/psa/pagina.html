@@ -1,0 +1,411 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta name="robots" content="noindex">
+<meta name="color-scheme" content="light dark">
+<title>parley507 v__VERSION__</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<style>
+/* Arena: concreto, tinta azul noche, dos lados (over verde duela, under azul) y el ámbar del reloj de tiro. */
+:root{
+  --fondo:#EDF0F3; --bloque:#FFFFFF; --tinta:#16202C; --suave:#5A6675; --regla:#D4DAE2; --pista:#E3E8EE;
+  --over:#0E7A5A; --under:#2C56C9; --reloj:#E3A008; --reloj-tinta:#16202C; --vivo:#C2410C;
+  --pos:#0E7A5A; --neg:#B5473A; --duda:#9A5B00;
+  --cond:"Barlow Condensed","Arial Narrow",sans-serif; --texto:"Barlow",system-ui,sans-serif;
+}
+@media (prefers-color-scheme:dark){:root{
+  --fondo:#121B27; --bloque:#1A2534; --tinta:#E6ECF3; --suave:#93A1B3; --regla:#2A374A; --pista:#253245;
+  --over:#3DBB8C; --under:#7C9CFF; --reloj:#F0B429; --reloj-tinta:#121B27; --vivo:#FB7A3C;
+  --pos:#3DBB8C; --neg:#F07D6B; --duda:#F0B429;
+}}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.45 var(--texto);font-variant-numeric:tabular-nums}
+a{color:inherit}
+:focus-visible{outline:2px solid var(--under);outline-offset:2px;border-radius:4px}
+.envoltura{max-width:720px;margin:0 auto;padding:0 16px}
+
+/* Cabecera: el nombre como rótulo de camiseta; el estado del día en pares dato-valor. */
+header{padding:18px 0 10px}
+.marca{display:flex;align-items:baseline;gap:8px}
+.marca h1{font:700 34px/1 var(--cond);letter-spacing:.5px;margin:0}
+.version{font:500 15px/1 var(--cond);color:var(--suave)}
+.estado{display:flex;flex-wrap:wrap;gap:4px 18px;margin:10px 0 0;font-size:13px}
+.estado div{display:flex;gap:6px}
+.estado dt{color:var(--suave)}
+.estado dd{margin:0;font-weight:500}
+
+/* Pestañas: texto, con subrayado grueso en la activa. */
+nav{position:sticky;top:0;z-index:3;background:var(--fondo);border-bottom:1px solid var(--regla)}
+nav .envoltura{display:flex;gap:0;overflow-x:auto;scrollbar-width:none}
+nav button{flex:0 0 auto;border:0;background:none;color:var(--suave);font:600 18px/1 var(--cond);padding:12px 7px 10px;
+  border-bottom:3px solid transparent;cursor:pointer}
+nav button[aria-selected=true]{color:var(--tinta);border-bottom-color:var(--tinta)}
+main{padding-top:14px;padding-bottom:48px}
+
+.suave{color:var(--suave)}
+.pequeno{font-size:13px}
+.vacio{color:var(--suave);text-align:center;padding:36px 0}
+.nota{color:var(--suave);font-size:13px;line-height:1.5;max-width:62ch;margin:14px 0}
+.aviso{border-left:3px solid var(--duda);padding:8px 12px;margin:0 0 12px;font-size:14px;background:var(--bloque);border-radius:0 8px 8px 0}
+
+/* Reloj de tiro: neutro si falta tiempo, ámbar a 30 min o menos, naranja en juego, gris al final. */
+.reloj{display:inline-flex;align-items:center;gap:6px;font:600 15px/1 var(--cond);padding:4px 8px;border-radius:6px;
+  border:1px solid var(--regla);white-space:nowrap}
+.reloj.pronto{background:var(--reloj);border-color:var(--reloj);color:var(--reloj-tinta)}
+.reloj.vivo{border-color:var(--vivo);color:var(--vivo)}
+.reloj.vivo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--vivo)}
+.reloj.final{color:var(--suave)}
+
+/* Partidos como renglones de tablero. */
+.partido{display:grid;grid-template-columns:1fr auto;gap:2px 12px;align-items:center;padding:14px 2px;
+  border-bottom:1px solid var(--regla);text-decoration:none}
+.partido:first-child{border-top:1px solid var(--regla)}
+.cruce{font:700 26px/1.05 var(--cond);letter-spacing:.3px}
+.cruce .arroba{color:var(--suave);font-weight:500;padding:0 3px}
+.partido .detalle{grid-column:1/-1;display:flex;gap:14px;font-size:13px;color:var(--suave)}
+
+/* Barra de probabilidad: relleno del color del lado; la marca fina es el mercado sin margen. */
+.barra{position:relative;height:6px;background:var(--pista);border-radius:3px;margin:7px 0 6px}
+.barra i{position:absolute;inset:0 auto 0 0;border-radius:3px}
+.barra.over i{background:var(--over)}
+.barra.under i{background:var(--under)}
+.barra b{position:absolute;top:-3px;width:2px;height:12px;background:var(--tinta);border-radius:1px}
+
+/* Fila de prop. */
+.prop{padding:11px 0 9px;border-top:1px solid var(--regla)}
+.prop .linea1{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.prop .quien{font-weight:600}
+.prop .prob{font:700 24px/1 var(--cond);white-space:nowrap;flex-shrink:0}
+.prop .linea2{display:flex;flex-wrap:wrap;justify-content:space-between;gap:2px 12px;font-size:13px;color:var(--suave)}
+.prop .precio{display:flex;gap:10px}
+.lado-over{color:var(--over);font-weight:600}
+.lado-under{color:var(--under);font-weight:600}
+.pos{color:var(--pos)} .neg{color:var(--neg)}
+.riesgo{color:var(--duda);font-size:13px}
+
+/* Bloques plegables de partido (los únicos con fondo) y apartados por área. */
+details.bloque{background:var(--bloque);border-radius:14px;padding:14px 14px 6px;margin:0 0 12px}
+details.bloque>summary{list-style:none;cursor:pointer;display:grid;grid-template-columns:1fr auto;gap:4px 12px;align-items:center;padding-bottom:8px}
+details.bloque>summary::-webkit-details-marker,details.area>summary::-webkit-details-marker{display:none}
+details.bloque>summary .detalle{grid-column:1/-1;font-size:13px;color:var(--suave);display:flex;gap:14px}
+details.bloque>summary .cruce::after{content:"";display:inline-block;width:8px;height:8px;margin:0 0 5px 10px;
+  border-right:2px solid var(--suave);border-bottom:2px solid var(--suave);transform:rotate(-45deg);transition:transform .15s}
+details.bloque[open]>summary .cruce::after{transform:rotate(45deg)}
+@media (prefers-reduced-motion:reduce){details.bloque>summary .cruce::after{transition:none}}
+details.area{border-top:1px solid var(--regla)}
+details.area>summary{list-style:none;cursor:pointer;padding:11px 0 11px 12px;position:relative}
+details.area>summary::before{content:"";position:absolute;left:0;top:11px;bottom:11px;width:3px;border-radius:2px}
+details.area.over>summary::before{background:var(--over)}
+details.area.under>summary::before{background:var(--under)}
+details.area>summary .titulo{font:600 19px/1.1 var(--cond)}
+details.area>summary .cuantos{color:var(--suave);font-weight:400;margin-left:6px}
+details.area>summary .mejor{display:block;font-size:13px;color:var(--suave);margin-top:2px}
+details.area[open]>summary{padding-bottom:4px}
+details.area .prop{margin-left:12px}
+
+/* Vista de un partido. */
+.volver{display:inline-block;text-decoration:none;color:var(--under);font-weight:500;padding:4px 0 10px}
+.titulo-juego{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.titulo-juego .cruce{font-size:34px}
+h2.seccion{font:700 22px/1.1 var(--cond);margin:26px 0 4px}
+.equipo{font:700 22px/1.1 var(--cond);margin:28px 0 6px;padding-bottom:6px;border-bottom:2px solid var(--tinta)}
+
+/* Ficha de jugador. */
+.ficha{padding:14px 0;border-bottom:1px solid var(--regla)}
+.ficha .encabezado{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
+.ficha .nombre{font:600 21px/1.1 var(--cond)}
+.ficha .datos{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:13px;color:var(--suave);margin-top:2px}
+.estado-lesion{font:600 15px/1 var(--cond)}
+.Out{color:var(--neg)} .Doubtful,.Questionable{color:var(--duda)} .Probable,.Available{color:var(--pos)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
+th{font-weight:500;color:var(--suave);text-align:right;padding:4px 3px;border-bottom:1px solid var(--regla)}
+td{text-align:right;padding:6px 3px;border-bottom:1px solid var(--pista);vertical-align:top}
+th:first-child,td:first-child{text-align:left}
+td .bajo{display:block;font-size:12px;color:var(--suave)}
+td.proy{font-weight:700}
+details.escenarios{margin-top:8px;font-size:13px}
+details.escenarios summary{cursor:pointer;color:var(--under)}
+
+.controles{display:flex;gap:8px;margin-bottom:6px}
+input,select{font:inherit;font-size:16px;padding:9px 11px;border:1px solid var(--regla);border-radius:8px;background:var(--bloque);color:var(--tinta);min-width:0}
+input{flex:1}
+
+/* Lesiones y modelo. */
+.lesion{display:grid;grid-template-columns:1fr auto;gap:0 10px;padding:10px 0;border-bottom:1px solid var(--regla)}
+.lesion .motivo{grid-column:1/-1;font-size:13px;color:var(--suave)}
+.temporada{background:var(--bloque);border-radius:14px;padding:14px;margin-bottom:12px}
+.temporada h2{font:700 22px/1 var(--cond);margin:0 0 4px}
+
+@media (prefers-reduced-motion:no-preference){details[open]>*:not(summary){animation:abrir .18s ease-out}}
+@keyframes abrir{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
+</style>
+</head>
+<body>
+<header class="envoltura">
+  <div class="marca"><h1>parley507</h1><span class="version">v__VERSION__</span></div>
+  <dl class="estado" id="estado"></dl>
+</header>
+<nav><div class="envoltura" id="tabs" role="tablist"></div></nav>
+<main class="envoltura" id="vista"></main>
+<script type="application/json" id="datos">__DATOS__</script>
+<script>
+const D = JSON.parse(document.getElementById('datos').textContent);
+const el = (tag, attrs = {}, ...hijos) => {
+  const n = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) {
+    if (k === 'class') n.className = v; else if (k === 'style') n.style.cssText = v; else n.setAttribute(k, v);
+  }
+  for (const h of hijos.flat()) if (h !== null && h !== undefined && h !== '' && h !== false) n.append(h instanceof Node ? h : String(h));
+  return n;
+};
+const vacio = x => x === null || x === undefined;
+const pct = (x, d = 0) => vacio(x) ? '—' : (x * 100).toFixed(d) + ' %';
+const num = (x, d = 1) => vacio(x) ? '—' : Number(x).toFixed(d);
+const ve = x => vacio(x) ? '—' : `${x > 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(1)} %`;
+const signo = x => vacio(x) ? '' : x > 0 ? 'pos' : 'neg';
+const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asistencias', puntos: 'Puntos', rebotes: 'Rebotes', asistencias: 'Asistencias'};
+const cruce = nombre => { const [a, b] = nombre.split(' @ '); return el('span', {class: 'cruce'}, a, el('span', {class: 'arroba'}, '@'), b || ''); };
+
+// Estado del día.
+const estado = document.getElementById('estado');
+for (const [dt, dd] of [['Jornada', D.fecha], ['Actualizado', D.generado + ' (Panamá)'], ['Lesiones', D.reporte_lesiones]])
+  if (dd) estado.append(el('div', {}, el('dt', {}, dt), el('dd', {}, dd)));
+
+// Reloj: cuenta regresiva hasta el inicio y, ya empezado, minutos desde el comienzo (reloj real, no el del partido).
+const duracion = m => m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
+function relojEstado(iso, est) {
+  if (est === 'final') return ['final', 'Final'];
+  if (!iso) return ['', ''];
+  const min = Math.round((Date.parse(iso) - Date.now()) / 60000);
+  if (min > 30) return ['', `en ${duracion(min)}`];
+  if (min > 0) return ['pronto', `en ${min} min`];
+  if (-min <= 180) return ['vivo', `en juego ${-min}'`];
+  return ['final', 'debería haber terminado'];
+}
+const reloj = p => {
+  const [clase, texto] = relojEstado(p.inicio, p.estado);
+  return el('span', {class: 'reloj ' + clase, 'data-inicio': p.inicio || '', 'data-estado': p.estado || ''}, texto);
+};
+setInterval(() => document.querySelectorAll('.reloj').forEach(n => {
+  const [clase, texto] = relojEstado(n.dataset.inicio, n.dataset.estado);
+  n.className = 'reloj ' + clase; n.textContent = texto;
+}), 30000);
+
+// Barra de probabilidad con la marca del mercado sin margen.
+function barra(prob, mercado, lado) {
+  const b = el('div', {class: 'barra ' + lado, role: 'img',
+    'aria-label': `probabilidad ${pct(prob)}` + (vacio(mercado) ? '' : `, mercado ${pct(mercado)}`)},
+    el('i', {style: `width:${Math.max(0, Math.min(1, prob)) * 100}%`}));
+  if (!vacio(mercado)) b.append(el('b', {style: `left:calc(${mercado * 100}% - 1px)`}));
+  return b;
+}
+// Fila de prop: quién y qué, probabilidad grande, barra, y precio.
+function filaProp({jugador, lado, linea, prob, mercado, cuota, valor, media, minutos, notas, etiqueta}) {
+  return el('div', {class: 'prop'},
+    el('div', {class: 'linea1'},
+      el('span', {}, el('span', {class: 'quien'}, jugador), ' ',
+        el('span', {class: 'lado-' + lado}, `${lado === 'over' ? 'Over' : 'Under'} ${num(linea)}`), etiqueta ? ` ${etiqueta}` : ''),
+      el('span', {class: 'prob'}, pct(prob))),
+    barra(prob, mercado, lado),
+    el('div', {class: 'linea2'},
+      el('span', {}, `Proyección ${num(media)}`, vacio(minutos) ? '' : ` en ${num(minutos, 0)} min`),
+      el('span', {class: 'precio'}, el('span', {}, vacio(cuota) ? 'sin cuota' : `Cuota ${num(cuota, 2)}`),
+        vacio(valor) ? '' : el('span', {class: signo(valor)}, `VE ${ve(valor)}`))),
+    notas ? el('div', {class: 'riesgo'}, notas) : '');
+}
+const avisos = texto => (texto || '').split('; ').filter(n => n && !n.startsWith('dispersión') && !n.startsWith('ajuste por'));
+
+// Ficha de jugador con sus tres props.
+function fichaJugador(j) {
+  const filas = ['pts', 'reb', 'ast'].map(k => {
+    const p = j.props[k] || {};
+    return el('tr', {}, el('td', {}, NOMBRES[k]), el('td', {}, num(p.l5)), el('td', {}, num(p.l10)), el('td', {}, num(p.temp)),
+      el('td', {class: 'proy'}, num(p.media)),
+      el('td', {}, vacio(p.linea) ? '—' : num(p.linea) + (p.tipo === 'ref' ? '*' : ''),
+        p.aciertos ? el('span', {class: 'bajo'}, `${p.aciertos[0]} de ${p.aciertos[1]}`) : ''),
+      el('td', {}, p.alto ? el('span', {class: 'lado-' + p.alto.lado}, `${p.alto.lado === 'over' ? 'Over' : 'Under'} ${pct(p.alto.p)}`) : '—',
+        !p.alto || vacio(p.alto.ve) ? '' : el('span', {class: 'bajo ' + signo(p.alto.ve)}, `VE ${ve(p.alto.ve)}`)));
+  });
+  const f = el('div', {class: 'ficha'},
+    el('div', {class: 'encabezado'}, el('span', {class: 'nombre'}, j.j), j.est ? el('span', {class: 'estado-lesion ' + j.est}, j.est) : ''),
+    el('div', {class: 'datos'}, el('span', {}, `${num(j.min)} min proyectados`), j.sd ? el('span', {}, `desviación ${num(j.sd)}`) : '',
+      el('span', {}, `${j.n} partidos de muestra`)),
+    el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'L5'), el('th', {}, 'L10'), el('th', {}, 'Temp.'),
+      el('th', {}, 'Proy.'), el('th', {}, 'Línea'), el('th', {}, 'Más probable')), ...filas));
+  if (j.otros.length) f.append(el('details', {class: 'escenarios'}, el('summary', {}, `Si falta un compañero (${j.otros.length})`),
+    ...j.otros.map(o => el('div', {class: 'suave'}, `${o.esc}: ${num(o.min)} min, ${num(o.m.pts && o.m.pts[0])} pts, ${num(o.m.reb && o.m.reb[0])} reb, ${num(o.m.ast && o.m.ast[0])} ast`))));
+  const n = avisos(j.notas);
+  if (n.length) f.append(el('div', {class: 'riesgo'}, n.join('. ')));
+  return f;
+}
+
+// Mejores props de un partido: primero líneas reales por VE; luego, con línea de referencia, las más probables de
+// jugadores con 20 minutos o más (para no premiar unders fáciles de suplentes).
+function mejoresProps(jugadores) {
+  const todas = [];
+  for (const j of jugadores) for (const k of ['pts', 'reb', 'ast']) {
+    const p = j.props[k];
+    if (!p || !p.lado || j.notas.includes('muestra insuficiente')) continue;
+    if (p.tipo === 'ref' && (j.min || 0) < 20) continue;
+    todas.push({j, k, p, orden: p.tipo === 'real' ? [0, -(p.ve ?? p.edge ?? -1)] : [1, -p.p_lado]});
+  }
+  return todas.filter(x => x.p.tipo === 'ref' || x.p.edge > 0)
+    .sort((a, b) => a.orden[0] - b.orden[0] || a.orden[1] - b.orden[1]).slice(0, 8);
+}
+function vistaJuego(nombre) {
+  const p = D.partidos.find(x => x.p === nombre);
+  const jug = D.jugadores.filter(j => j.p === nombre);
+  const out = [el('a', {href: '#', class: 'volver'}, 'Volver a partidos'),
+    el('div', {class: 'titulo-juego'}, cruce(nombre), p ? reloj(p) : ''),
+    p ? el('div', {class: 'suave pequeno'}, `${p.hora} hora de Panamá`, p.marcador ? `, final ${p.marcador}` : '') : ''];
+  if (!jug.length) return out.concat(el('p', {class: 'vacio'}, 'No hay proyecciones para este partido.'));
+  const mejores = mejoresProps(jug);
+  out.push(el('h2', {class: 'seccion'}, 'Lo que el modelo empuja'));
+  if (mejores.some(x => x.p.tipo === 'real') && !mejores.some(x => x.p.ve > 0))
+    out.push(el('div', {class: 'aviso'}, 'Ninguna línea de Stake tiene VE positivo: son las que el modelo inclina a favor, pero el margen de la casa las deja en negativo.'));
+  if (!mejores.length) out.push(el('p', {class: 'suave'}, 'Ninguna prop destaca en este partido.'));
+  for (const {j, k, p: q} of mejores) out.push(filaProp({jugador: j.j, lado: q.lado, linea: q.linea, prob: q.p_lado,
+    mercado: q.p_mercado, cuota: q.tipo === 'real' && !String(q.casa).startsWith('Consenso') ? q.cuota : null, valor: q.ve,
+    media: q.media, minutos: j.min, etiqueta: NOMBRES[k].toLowerCase() + (q.tipo === 'ref' ? '*' : ''),
+    notas: [['Out', 'Doubtful', 'Questionable'].includes(j.est) ? j.est : '', j.sd > 6 ? 'minutos inestables' : ''].filter(Boolean).join(', ')}));
+  out.push(el('p', {class: 'nota'}, 'Con línea real, la probabilidad parte del mercado sin margen (la marca fina de la barra) y el modelo la mueve como mucho 4 puntos, porque todavía no le gana al mercado. VE es esa probabilidad por la cuota, menos 1. Con * la línea es de referencia (media de los últimos 10, sin cuota): solo indica hacia dónde se inclina el modelo. BET o PASS lo decide /parley.'));
+  for (const equipo of [...new Set(jug.map(j => j.eq))])
+    out.push(el('h2', {class: 'equipo'}, equipo), ...jug.filter(j => j.eq === equipo).map(fichaJugador));
+  return out;
+}
+
+const vistas = {
+  Partidos() {
+    if (!D.partidos.length) return [el('p', {class: 'vacio'}, 'No hay partidos NBA este día.')];
+    return [el('div', {}, ...D.partidos.map(p => el('a', {class: 'partido', href: '#juego=' + encodeURIComponent(p.p)},
+      cruce(p.p), reloj(p),
+      el('div', {class: 'detalle'}, el('span', {}, `${p.hora} hora de Panamá`), p.marcador ? el('span', {}, `Final ${p.marcador}`) : '',
+        el('span', {}, `${D.jugadores.filter(j => j.p === p.p).length} jugadores`))))),
+      el('p', {class: 'nota'}, 'Toca un partido para ver a cada jugador y lo que el modelo empuja.')];
+  },
+  Props() {
+    const out = [];
+    if (!D.props.length) return [el('div', {class: 'aviso'}, 'PROYECCIÓN ESTADÍSTICA — SIN VALOR DE APUESTA CONFIRMADO'),
+      el('p', {class: 'vacio'}, 'Todavía no hay líneas para este día. Llegan cuando /parley lee Stake.')];
+    if (!D.con_precio) out.push(el('div', {class: 'aviso'}, 'PROYECCIÓN ESTADÍSTICA — SIN VALOR DE APUESTA CONFIRMADO'));
+    // Un bloque plegable por partido (abierto el próximo en empezar). Dentro, por área y lado, de mayor a menor
+    // probabilidad de salir. La más probable suele pagar menos: el VE dice si el precio la compensa.
+    const grupos = new Map(D.partidos.map(p => [p.p, []]));
+    for (const p of D.props) {
+      const clave = p.partido || 'Sin partido identificado';
+      if (!grupos.has(clave)) grupos.set(clave, []);
+      grupos.get(clave).push(p);
+    }
+    const proximo = D.partidos.find(j => j.inicio && Date.parse(j.inicio) > Date.now() && (grupos.get(j.p) || []).length);
+    for (const [nombre, lista] of grupos) {
+      if (!lista.length) continue;
+      const juego = D.partidos.find(x => x.p === nombre);
+      const bloque = el('details', {class: 'bloque'},
+        el('summary', {}, cruce(nombre), juego ? reloj(juego) : '',
+          el('div', {class: 'detalle'}, juego ? el('span', {}, `${juego.hora} hora de Panamá`) : '', el('span', {}, `${lista.length} líneas`))));
+      if (proximo && proximo.p === nombre) bloque.open = true;
+      for (const mercado of ['puntos', 'rebotes', 'asistencias']) for (const lado of ['over', 'under']) {
+        const filas = lista.filter(p => p.mercado === mercado && !vacio(p['P ' + lado]))
+          .map(p => {
+            const mo = p['P mercado over (sin margen)'];
+            return {p, prob: p['P mezcla ' + lado] ?? p['P ' + lado], mercado: vacio(mo) ? null : (lado === 'over' ? mo : 1 - mo),
+                    cuota: p['cuota ' + lado], valor: String(p.casa).startsWith('Consenso') ? null : p['VE ' + lado]};
+          })
+          .sort((a, b) => b.prob - a.prob);
+        if (!filas.length) continue;
+        const m = filas[0];
+        bloque.append(el('details', {class: 'area ' + lado},
+          el('summary', {}, el('span', {class: 'titulo'}, `${NOMBRES[mercado]} ${lado === 'over' ? 'over' : 'under'}`),
+            el('span', {class: 'cuantos'}, filas.length),
+            el('span', {class: 'mejor'}, `Más probable: ${m.p.jugador} ${num(m.p['línea'])}, ${pct(m.prob)}`)),
+          ...filas.map(f => filaProp({jugador: f.p.jugador, lado, linea: f.p['línea'], prob: f.prob, mercado: f.mercado,
+            cuota: f.cuota, valor: f.valor, media: f.p.media, minutos: f.p.minutos,
+            notas: (f.p.riesgos || '').includes('inestables') ? 'minutos inestables' : ''}))));
+      }
+      const sin = lista.filter(p => vacio(p['P over']));
+      if (sin.length) bloque.append(el('p', {class: 'nota'}, `Sin proyección: ${sin.map(p => `${p.jugador} (${p.mercado})`).join(', ')}.`));
+      out.push(bloque);
+    }
+    out.push(el('p', {class: 'nota'}, 'La barra es la probabilidad de que la prop salga; la marca fina es lo que dice el mercado sin margen. El modelo mueve esa probabilidad como mucho 4 puntos. El VE solo existe con precio de una casa: el consenso de BettingPros es referencia.'));
+    return out;
+  },
+  Jugadores() {
+    const buscar = el('input', {type: 'search', placeholder: 'Buscar jugador', 'aria-label': 'Buscar jugador'});
+    const partido = el('select', {'aria-label': 'Partido'}, el('option', {value: ''}, 'Todos los partidos'),
+      ...D.partidos.map(p => el('option', {value: p.p}, p.p)));
+    const lista = el('div');
+    const pintar = () => {
+      const q = buscar.value.trim().toLowerCase();
+      const filas = D.jugadores.filter(j => (!q || j.j.toLowerCase().includes(q)) && (!partido.value || j.p === partido.value));
+      const tope = 80;
+      lista.replaceChildren(...(filas.length ? filas.slice(0, tope).map(fichaJugador) : [el('p', {class: 'vacio'}, 'Ningún jugador coincide.')]),
+        filas.length > tope ? el('p', {class: 'nota'}, `Se muestran ${tope} de ${filas.length}. Filtra por partido o busca un nombre.`) : '');
+    };
+    buscar.addEventListener('input', pintar); partido.addEventListener('change', pintar); pintar();
+    return [el('div', {class: 'controles'}, buscar, partido), lista];
+  },
+  Lesiones() {
+    if (!D.lesiones.length) return [el('p', {class: 'vacio'}, 'No hay reporte de lesiones para este día.')];
+    const out = [];
+    for (const equipo of [...new Set(D.lesiones.map(l => l.eq))]) {
+      out.push(el('h2', {class: 'equipo'}, equipo || 'Sin equipo'));
+      for (const l of D.lesiones.filter(x => x.eq === equipo)) out.push(el('div', {class: 'lesion'},
+        el('span', {}, l.j), el('span', {class: 'estado-lesion ' + l.est}, l.est + (l.manual ? ' (manual)' : '')),
+        el('span', {class: 'motivo'}, l.motivo.replace('Injury/Illness-', '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/;/g, '; '))));
+    }
+    return out;
+  },
+  Modelo() {
+    const b = D.backtest;
+    if (!b) return [el('p', {class: 'vacio'}, 'Todavía no hay backtest.')];
+    const out = [el('p', {class: 'nota'}, `${D.modelo}, backtest del ${b.fecha} con datos hasta ${D.corte || '—'}. En el Brier, menor es mejor; L10 es acertar con el promedio de los últimos 10.`)];
+    for (const [temp, m] of Object.entries(b.metricas)) out.push(el('section', {class: 'temporada'}, el('h2', {}, `Temporada ${temp}`),
+      el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier modelo'), el('th', {}, 'Brier L10'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90')),
+        ...Object.entries(m).map(([s, v]) => el('tr', {}, el('td', {}, {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'}[s] || s),
+          el('td', {}, num(v.brier_modelo, 3)), el('td', {}, num(v.brier_acierto_l10, 3)), el('td', {}, num(v.mae_modelo, 2)), el('td', {}, pct(v.cobertura_10_90)))))));
+    const l = b.legs_reales;
+    if (l && l.legs_decididos) out.push(el('section', {class: 'temporada'}, el('h2', {}, 'Tus legs reales'),
+      el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier')),
+        el('tr', {}, el('td', {}, 'App'), el('td', {}, num(l.comparables_brier_app, 3))),
+        el('tr', {}, el('td', {}, 'Mercado'), el('td', {}, num(l.comparables_brier_mercado, 3))),
+        el('tr', {}, el('td', {}, '/parley'), el('td', {}, num(l.comparables_brier_parley, 3)))),
+      el('p', {class: 'nota'}, `${l.legs_comparables} de 100 legs comparables. ` + (l.muestra_suficiente ? 'Ya hay muestra para decidir.' : 'Hasta llegar a 100, la app es solo informativa.'))));
+    return out;
+  },
+};
+
+const tabs = document.getElementById('tabs'), vista = document.getElementById('vista');
+let actual = 'Partidos';
+function mostrar(nombre) {
+  actual = nombre;
+  for (const b of tabs.children) b.setAttribute('aria-selected', b.textContent === nombre);
+  vista.replaceChildren(...vistas[nombre]());
+  try { localStorage.setItem('pestana', nombre); } catch (e) {}
+}
+// #juego=NOMBRE abre un partido; así el botón "atrás" del celular vuelve a la lista.
+function ruta() {
+  const m = location.hash.match(/^#juego=(.+)$/);
+  if (m) {
+    for (const b of tabs.children) b.setAttribute('aria-selected', b.textContent === 'Partidos');
+    vista.replaceChildren(...vistaJuego(decodeURIComponent(m[1])));
+    scrollTo(0, 0);
+  } else mostrar(actual);
+}
+for (const nombre of Object.keys(vistas)) {
+  const b = el('button', {role: 'tab'}, nombre);
+  b.addEventListener('click', () => { actual = nombre; location.hash ? (location.hash = '') : mostrar(nombre); });
+  tabs.append(b);
+}
+let guardada = null; try { guardada = localStorage.getItem('pestana'); } catch (e) {}
+if (vistas[guardada]) actual = guardada;
+addEventListener('hashchange', ruta);
+ruta();
+</script>
+</body>
+</html>

@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.6 — 2026-11-15
+
+- Rediseño de la página del celular: tema de arena (concreto y tinta azul noche, over en verde duela, under en
+  azul), Barlow Condensed para partidos y cifras, modo oscuro en azul marino.
+- Barra de probabilidad en cada prop, con una marca donde está el mercado sin margen.
+- Reloj de tiro: neutro, ámbar a 30 minutos o menos, naranja en juego.
+- Tabla del jugador con el lado más probable, su VE y sus aciertos en los últimos 10.
+- La plantilla pasa a `src/psa/pagina.html`.
+
 ## v0.1.5 — 2026-11-15
 
 - Props en bloques plegables por partido (abierto el próximo en empezar) y, dentro, apartados plegables por área y
