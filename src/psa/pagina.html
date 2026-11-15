@@ -3,13 +3,18 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; img-src data:; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; img-src data: 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#16202C">
+<link rel="icon" href="icono.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icono-180.png">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="apple-mobile-web-app-title" content="Parley507">
 <title>parley507 v__VERSION__</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,500;0,600;0,700;1,800&family=Barlow:wght@400;500;600&display=swap">
 <style>
 /* Arena: concreto, tinta azul noche, dos lados (over verde duela, under azul) y el ámbar del reloj de tiro. */
 :root{
@@ -17,11 +22,13 @@
   --over:#0E7A5A; --under:#2C56C9; --reloj:#E3A008; --reloj-tinta:#16202C; --vivo:#C2410C;
   --pos:#0E7A5A; --neg:#B5473A; --duda:#9A5B00;
   --cond:"Barlow Condensed","Arial Narrow",sans-serif; --texto:"Barlow",system-ui,sans-serif;
+  --logo-fondo:#16202C;
 }
 @media (prefers-color-scheme:dark){:root{
   --fondo:#121B27; --bloque:#1A2534; --tinta:#E6ECF3; --suave:#93A1B3; --regla:#2A374A; --pista:#253245;
   --over:#3DBB8C; --under:#7C9CFF; --reloj:#F0B429; --reloj-tinta:#121B27; --vivo:#FB7A3C;
   --pos:#3DBB8C; --neg:#F07D6B; --duda:#F0B429;
+  --logo-fondo:#26354B;
 }}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%}
@@ -32,9 +39,15 @@ a{color:inherit}
 
 /* Cabecera: el nombre como rótulo de camiseta; el estado del día en pares dato-valor. */
 header{padding:18px 0 10px}
-.marca{display:flex;align-items:baseline;gap:8px}
-.marca h1{font:700 34px/1 var(--cond);letter-spacing:.5px;margin:0}
-.version{font:500 15px/1 var(--cond);color:var(--suave)}
+/* Marca: el logo y el nombre. "parley" inclinado como rotulación deportiva; "507" (código de Panamá) en números
+   delineados, como el dorsal de una camiseta. */
+.marca{display:flex;align-items:center;gap:12px}
+.marca svg{width:48px;height:48px;flex:none}
+.marca h1{margin:0;display:flex;align-items:baseline;line-height:.9}
+.parley{font:italic 800 40px/.9 var(--cond);letter-spacing:-.5px}
+.dorsal{font:italic 800 40px/.9 var(--cond);letter-spacing:1px;margin-left:3px;color:var(--tinta)}
+@supports (-webkit-text-stroke:1px black){.dorsal{color:transparent;-webkit-text-stroke:1.6px var(--tinta)}}
+.version{font:500 15px/1 var(--cond);color:var(--suave);align-self:flex-end;margin-bottom:2px}
 .estado{display:flex;flex-wrap:wrap;gap:4px 18px;margin:10px 0 0;font-size:13px}
 .estado div{display:flex;gap:6px}
 .estado dt{color:var(--suave)}
@@ -148,7 +161,7 @@ input{flex:1}
 </head>
 <body>
 <header class="envoltura">
-  <div class="marca"><h1>parley507</h1><span class="version">v__VERSION__</span></div>
+  <div class="marca">__LOGO__<h1 aria-label="parley507"><span class="parley">parley</span><span class="dorsal">507</span></h1><span class="version">v__VERSION__</span></div>
   <dl class="estado" id="estado"></dl>
 </header>
 <nav><div class="envoltura" id="tabs" role="tablist"></div></nav>

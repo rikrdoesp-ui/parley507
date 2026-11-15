@@ -45,6 +45,9 @@ uv run pytest
 GitHub Pages en https://rikrdoesp-ui.github.io/parley507/. Es una foto de solo lectura de la última actualización:
 partidos, proyecciones por jugador, líneas, lesiones y backtest. El repositorio es público, así que la página también.
 Para no subirla: `uv run actualizar --sin-publicar`.
+Para tenerla como app en el celular: ábrela en el navegador y usa "Agregar a pantalla de inicio" (Android) o
+Compartir → "Agregar a inicio" (iPhone). El logo vive en `src/psa/marca.py`; si cambia, regenera los íconos con
+`uv run --with pillow python tools/iconos.py`.
 
 ## Dónde están los datos
 

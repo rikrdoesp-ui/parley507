@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from . import config
+from . import config, marca
 from .db import clave_nombre
 from .nba import lesiones, modelo, proyeccion
 from .nba import props as props_nba
@@ -182,7 +182,9 @@ def generar(con, fecha: str, destino: Path = DESTINO) -> Path:
     destino.parent.mkdir(parents=True, exist_ok=True)
     (destino.parent / ".nojekyll").touch()
     temporal = destino.with_suffix(".tmp")
-    temporal.write_text(PLANTILLA.replace("__VERSION__", version()).replace("__DATOS__", contenido), encoding="utf-8")
+    logo = marca.svg({"fondo": "var(--logo-fondo)", "costura": "var(--logo-fondo)"})
+    html = PLANTILLA.replace("__VERSION__", version()).replace("__LOGO__", logo).replace("__DATOS__", contenido)
+    temporal.write_text(html, encoding="utf-8")
     temporal.replace(destino)
     return destino
 

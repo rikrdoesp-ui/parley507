@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.8 — 2026-11-15
+
+- Logo: la trayectoria de un tiro en puntos, el balón y la barra de probabilidad de la página
+  (`src/psa/marca.py`, una sola geometría para la cabecera, la pestaña y los PNG).
+- Nombre: "parley" en Barlow Condensed negra inclinada y "507" en números delineados, como un dorsal.
+- Ícono de pestaña, ícono para iPhone y manifiesto web: la página se puede agregar a la pantalla de inicio.
+  Los íconos se regeneran con `uv run --with pillow python tools/iconos.py`.
+
 ## v0.1.7 — 2026-11-15
 
 - Spread estimado propio por partido (fuerza reciente de cada equipo + localía, solo con partidos anteriores):
