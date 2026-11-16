@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.24 — 2026-11-15
+
+- Tocar la foto del jugador la abre en grande (1040x760 de la NBA) con su nombre y partido; se cierra con la X,
+  tocando fuera o con Esc. En el celular ocupa casi todo el ancho.
+
 ## v0.1.23 — 2026-11-15
 
 - Alineaciones de RotoWire en cada actualización (solo los partidos del calendario del día). La ficha dice
