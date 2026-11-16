@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.15 — 2026-11-15
+
+- Pestaña Parley: por partido, el parley de 2 y de 3 legs más probable con líneas y precio de Stake, cada leg con
+  su justificación (proyección contra línea, cumplimiento en los últimos 10, promedios L5 y L10, minutos, mercado
+  sin margen y probabilidad con el modelo). Filtros: sin duda ni baja, 20+ minutos estables, muestra suficiente,
+  6 de 10 o más, 55 % o más, sin overs con riesgo de paliza, un leg por jugador y máximo 2 por equipo. Muestra la
+  probabilidad conjunta, la cuota de Stake, la cuota justa y el VE. BET o PASS los sigue decidiendo /parley.
+- Pestaña Resultados aparte: si se dieron o no las props. En Modelo queda solo la corrección por sesgo.
+
 ## v0.1.14 — 2026-11-15
 
 - Actualización automática: tarea de Windows "Parley507 actualizar" cada 30 min de 10:00 a 01:00, sin ventana

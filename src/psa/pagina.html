@@ -161,6 +161,14 @@ input{flex:1}
 .temporada{background:var(--bloque);border-radius:14px;padding:14px;margin-bottom:12px}
 .temporada h2{font:700 22px/1 var(--cond);margin:0 0 4px}
 td.gano{color:var(--over);font-weight:700}
+.combinada{border-top:1px solid var(--regla);padding:10px 0 4px}
+.parley-cabeza{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:13.5px;margin-bottom:6px}
+.parley-cabeza .titulo{font:700 20px/1 var(--cond)}
+.leg{border-left:3px solid var(--regla);padding:4px 0 4px 10px;margin:8px 0}
+.leg.over{border-color:var(--over)} .leg.under{border-color:var(--under)}
+.leg-linea{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;font-size:15px}
+.leg-p{margin-left:auto;font-weight:600}
+.por-que{margin:4px 0 0;font-size:13px;line-height:1.45;color:var(--suave)}
 td.perdio{color:var(--panama-rojo);font-weight:700}
 
 @media (prefers-reduced-motion:no-preference){details[open]>*:not(summary){animation:abrir .18s ease-out}}
@@ -190,6 +198,7 @@ const pct = (x, d = 0) => vacio(x) ? '—' : (x * 100).toFixed(d) + ' %';
 const num = (x, d = 1) => vacio(x) ? '—' : Number(x).toFixed(d);
 const ve = x => vacio(x) ? '—' : `${x > 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(1)} %`;
 const signo = x => vacio(x) ? '' : x > 0 ? 'pos' : 'neg';
+const ESTADISTICAS = {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'};
 const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asistencias', puntos: 'Puntos', rebotes: 'Rebotes', asistencias: 'Asistencias'};
 const cruce = nombre => { const [a, b] = nombre.split(' @ '); return el('span', {class: 'cruce'}, a, el('span', {class: 'arroba'}, '@'), b || ''); };
 
@@ -374,6 +383,29 @@ const vistas = {
     out.push(el('p', {class: 'nota'}, 'La barra es la probabilidad de que la prop salga; la marca fina es lo que dice el mercado sin margen. El modelo mueve esa probabilidad como mucho 4 puntos. El VE solo existe con precio de una casa: el consenso de BettingPros es referencia.'));
     return out;
   },
+  Parley() {
+    if (!D.parleys || !D.parleys.length) return [el('p', {class: 'vacio'}, 'Hoy ninguna combinación pasa los filtros: hacen falta líneas de Stake con precio y legs de 55 % o más.')];
+    const out = [el('p', {class: 'nota'}, 'Por partido, los legs más probables con línea y precio de Stake: jugador sin duda, 20+ minutos estables, el lado salió en 6 o más de sus últimos 10, un leg por jugador y máximo 2 por equipo. La probabilidad supone legs independientes. Stake paga menos en "mismo juego": juégalo solo si su cuota llega a la justa. BET o PASS y el monto los decide /parley.')];
+    const partidos = [...new Set(D.parleys.map(x => x.partido))];
+    partidos.forEach((nombre, i) => {
+      const info = D.partidos.find(x => x.p === nombre) || {};
+      const bloque = el('details', {class: 'bloque'}, el('summary', {}, cruce(nombre), reloj(info)));
+      if (i === 0) bloque.open = true;
+      for (const x of D.parleys.filter(y => y.partido === nombre)) {
+        const cabeza = el('div', {class: 'parley-cabeza'},
+          el('span', {class: 'titulo'}, `${x.legs.length} legs`),
+          el('span', {}, `Prob. ${pct(x.prob, 1)}`), el('span', {}, `Cuota Stake ${num(x.cuota, 2)}`),
+          el('span', {}, `Justa ${num(x.cuota_justa, 2)}`), el('span', {class: signo(x.ve)}, `VE ${ve(x.ve)}`));
+        bloque.append(el('div', {class: 'combinada'}, cabeza, ...x.legs.map(l => el('div', {class: 'leg ' + l.lado},
+          el('div', {class: 'leg-linea'}, el('strong', {}, l.j), el('span', {}, `${l.mercado} ${l.lado} ${l.linea}`),
+            el('span', {class: 'leg-p'}, `${pct(l.prob)} a ${num(l.cuota, 2)}`)),
+          el('p', {class: 'por-que'}, l.por_que)))));
+      }
+      out.push(bloque);
+    });
+    if (!D.parleys.some(x => x.ve > 0)) out.splice(1, 0, el('div', {class: 'aviso'}, 'Ninguno tiene VE positivo: el margen de la casa se multiplica en cada leg. Son los más probables, no apuestas con ventaja.'));
+    return out;
+  },
   Jugadores() {
     const buscar = el('input', {type: 'search', placeholder: 'Buscar jugador', 'aria-label': 'Buscar jugador'});
     const partido = el('select', {'aria-label': 'Partido'}, el('option', {value: ''}, 'Todos los partidos'),
@@ -400,6 +432,17 @@ const vistas = {
     }
     return out;
   },
+  Resultados() {
+    const r = D.resultados, ln = r && r.lineas;
+    if (!ln || !ln.n) return [el('p', {class: 'vacio'}, 'Todavía no hay props calificadas. Se califican solas cuando terminan los partidos.')];
+    return [
+      el('p', {class: 'nota'}, `Si se dieron o no las props con línea guardada, en el lado que el modelo veía más probable. Acertó ${ln.aciertos} de ${ln.n} (${pct(ln.aciertos / ln.n)}).` +
+        (ln.n_mercado ? ` Brier modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)} (menor es mejor).` : '')),
+      el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
+        ...ln.ultimos.map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, x.f.slice(8) + '/' + x.f.slice(5, 7))),
+          el('td', {}, `${{puntos: 'PTS', rebotes: 'REB', asistencias: 'AST'}[x.m] || x.m} ${x.lado} ${x.l}`), el('td', {}, pct(x.p)),
+          el('td', {class: x.ok ? 'gano' : 'perdio'}, `${x.real} ${x.ok ? '✓' : '✗'}`))))];
+  },
   Modelo() {
     const b = D.backtest;
     if (!b) return [el('p', {class: 'vacio'}, 'Todavía no hay backtest.')];
@@ -409,24 +452,11 @@ const vistas = {
         ...Object.entries(m).map(([s, v]) => el('tr', {}, el('td', {}, {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'}[s] || s),
           el('td', {}, num(v.brier_modelo, 3)), el('td', {}, num(v.brier_acierto_l10, 3)), el('td', {}, num(v.mae_modelo, 2)), el('td', {}, pct(v.cobertura_10_90)))))));
     const r = D.resultados;
-    const nombres = {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'};
-    if (r) {
-      const sec = [el('h2', {}, 'Resultados'),
-        el('p', {class: 'nota'}, `${r.dias} días ya jugados (${r.desde} a ${r.hasta}), calificados en cada actualización. Sesgo es lo real menos lo proyectado; el factor es la corrección que ya se aplica a las proyecciones nuevas (1.000 = sin cambio). El rango 10-90 debería atrapar cerca del 80 %.`),
-        el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Casos'), el('th', {}, 'Sesgo'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90'), el('th', {}, 'Factor')),
-          ...Object.entries(r.por_stat).map(([s, v]) => el('tr', {}, el('td', {}, nombres[s] || s), el('td', {}, String(v.n)),
-            el('td', {}, num(v.sesgo, 2)), el('td', {}, num(v.mae, 2)), el('td', {}, pct(v.cobertura_10_90)), el('td', {}, num(v.factor, 3)))))];
-      const ln = r.lineas;
-      if (ln.n) {
-        sec.push(el('p', {class: 'nota'}, `Contra las líneas guardadas, el lado más probable del modelo acertó ${ln.aciertos} de ${ln.n}.` +
-          (ln.n_mercado ? ` Brier modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)} (menor es mejor).` : '')));
-        sec.push(el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
-          ...ln.ultimos.map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, x.f.slice(8) + '/' + x.f.slice(5, 7))),
-            el('td', {}, `${{puntos: 'PTS', rebotes: 'REB', asistencias: 'AST'}[x.m] || x.m} ${x.lado} ${x.l}`), el('td', {}, pct(x.p)),
-            el('td', {class: x.ok ? 'gano' : 'perdio'}, `${x.real} ${x.ok ? '✓' : '✗'}`)))));
-      }
-      out.splice(1, 0, el('section', {class: 'temporada'}, ...sec));  // Lo más reciente va primero.
-    }
+    if (r) out.splice(1, 0, el('section', {class: 'temporada'}, el('h2', {}, 'Corrección por resultados'),
+      el('p', {class: 'nota'}, `Con ${r.dias} días ya jugados (${r.desde} a ${r.hasta}). Sesgo es lo real menos lo proyectado; el factor es la corrección que ya se aplica a las proyecciones nuevas (1.000 = sin cambio). El rango 10-90 debería atrapar cerca del 80 %.`),
+      el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Casos'), el('th', {}, 'Sesgo'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90'), el('th', {}, 'Factor')),
+        ...Object.entries(r.por_stat).map(([s, v]) => el('tr', {}, el('td', {}, ESTADISTICAS[s] || s), el('td', {}, String(v.n)),
+          el('td', {}, num(v.sesgo, 2)), el('td', {}, num(v.mae, 2)), el('td', {}, pct(v.cobertura_10_90)), el('td', {}, num(v.factor, 3)))))));
     const l = b.legs_reales;
     if (l && l.legs_decididos) out.push(el('section', {class: 'temporada'}, el('h2', {}, 'Tus legs reales'),
       el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier')),

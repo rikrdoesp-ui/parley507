@@ -247,3 +247,27 @@ def test_calificar_usa_la_proyeccion_previa_y_no_aplica_dos_veces_el_factor(tmp_
     assert fila.lado == "over" and fila.acierto == 1 and fila.p_mercado == pytest.approx(0.5)
     factores, metricas = resultados.resumir(df)
     assert factores["points"] > 1 and metricas["lineas"]["aciertos"] == 1
+
+
+# --- Parleys por partido -------------------------------------------------------------
+
+def _jugador(nombre, eq, p, lado="over", aciertos=7, est="", notas="", minutos=30, casa="Stake"):
+    prop = {"tipo": "real", "casa": casa, "linea": 10.5, "media": 12.0, "l5": 12, "l10": 11.5,
+            "aciertos": [aciertos, 10], "alto": {"lado": lado, "p": p, "ve": -0.02, "cuota": 1.8, "pm": p - 0.02}}
+    return {"j": nombre, "eq": eq, "p": "AAA @ BBB", "esc": "base", "min": minutos, "est": est, "notas": notas,
+            "props": {"pts": prop}}
+
+
+def test_parley_filtra_y_elige_los_mas_probables():
+    from psa.nba import combinadas
+    jugadores = [_jugador("A", "AAA", 0.70), _jugador("B", "AAA", 0.68), _jugador("C", "AAA", 0.66),  # 3.º del mismo equipo
+                 _jugador("D", "BBB", 0.60), _jugador("Duda", "BBB", 0.90, est="Questionable"),
+                 _jugador("Poco", "BBB", 0.90, aciertos=5), _jugador("Paliza", "BBB", 0.90, notas="riesgo de paliza"),
+                 _jugador("Consenso", "BBB", 0.90, casa="Consenso BettingPros"), _jugador("Banca", "BBB", 0.90, minutos=12),
+                 _jugador("Bajo", "BBB", 0.50)]
+    parleys = combinadas.armar(jugadores)
+    assert [len(p["legs"]) for p in parleys] == [2, 3]
+    assert [l["j"] for l in parleys[1]["legs"]] == ["A", "B", "D"]  # Máximo 2 por equipo: C queda fuera.
+    assert parleys[0]["prob"] == pytest.approx(0.70 * 0.68, abs=1e-3)
+    assert parleys[0]["cuota_justa"] == pytest.approx(1 / (0.70 * 0.68), abs=0.01)
+    assert "7 de sus últimos 10" in parleys[0]["legs"][0]["por_que"]

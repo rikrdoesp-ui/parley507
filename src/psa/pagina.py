@@ -14,6 +14,7 @@ import pandas as pd
 
 from . import config, marca
 from . import db
+from .nba import combinadas
 from .db import clave_nombre
 from .nba import lesiones, modelo, proyeccion, resultados
 from .nba import props as props_nba
@@ -76,7 +77,10 @@ def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -
     # El lado más probable (para la tabla del jugador), que no siempre es el que el modelo empuja sobre el mercado.
     if real and real.get("P mezcla over") is not None:
         alto = "over" if real["P mezcla over"] >= real["P mezcla under"] else "under"
-        salida["alto"] = {"lado": alto, "p": round(real[f"P mezcla {alto}"], 3), "ve": limpio(real.get(f"VE {alto}"))}
+        pm = real.get("P mercado over (sin margen)")
+        salida["alto"] = {"lado": alto, "p": round(real[f"P mezcla {alto}"], 3), "ve": limpio(real.get(f"VE {alto}")),
+                          "cuota": limpio(real.get(f"cuota {alto}"), 2),
+                          "pm": None if pm is None else round(pm if alto == "over" else 1 - pm, 3)}
     else:
         alto = lado
         salida["alto"] = {"lado": lado, "p": salida["p_lado"], "ve": None}
@@ -178,6 +182,7 @@ def datos(con, fecha: str) -> dict:
         "jugadores": jugadores, "lesiones": lista_lesiones, "props": lineas, "con_precio": props_nba.hay_precio(tabla),
         "backtest": backtest,
         "resultados": resultados.ultimas_metricas(con),
+        "parleys": combinadas.armar(jugadores),
     }
 
 
