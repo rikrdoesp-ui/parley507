@@ -52,6 +52,8 @@ header{padding:18px 0 10px}
 .dorsal .d0{color:var(--panama-blanco-respaldo)}
 @supports (-webkit-text-stroke:1px black){.dorsal .d0{color:var(--panama-blanco);-webkit-text-stroke:var(--panama-blanco-borde)}}
 .version{font:500 15px/1 var(--cond);color:var(--suave);align-self:flex-end;margin-bottom:2px}
+.recargar{margin-left:auto;font:600 17px/1 var(--cond);min-height:44px;padding:0 16px;border-radius:10px;border:1px solid var(--regla);background:var(--bloque);color:var(--tinta);cursor:pointer}
+.recargar[aria-busy=true]{opacity:.6}
 .estado{display:flex;flex-wrap:wrap;gap:4px 18px;margin:10px 0 0;font-size:13px}
 .estado div{display:flex;gap:6px}
 .estado dt{color:var(--suave)}
@@ -167,7 +169,7 @@ td.perdio{color:var(--panama-rojo);font-weight:700}
 </head>
 <body>
 <header class="envoltura">
-  <div class="marca">__LOGO__<h1 aria-label="parley507"><span class="parley">parley</span><span class="dorsal"><span class="d5">5</span><span class="d0">0</span><span class="d7">7</span></span></h1><span class="version">v__VERSION__</span></div>
+  <div class="marca">__LOGO__<h1 aria-label="parley507"><span class="parley">parley</span><span class="dorsal"><span class="d5">5</span><span class="d0">0</span><span class="d7">7</span></span></h1><span class="version">v__VERSION__</span><button class="recargar" id="recargar" type="button">Recargar</button></div>
   <dl class="estado" id="estado"></dl>
 </header>
 <nav><div class="envoltura" id="tabs" role="tablist"></div></nav>
@@ -193,11 +195,23 @@ const cruce = nombre => { const [a, b] = nombre.split(' @ '); return el('span', 
 
 // Estado del día.
 const estado = document.getElementById('estado');
+const duracion = m => m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
+// La PC actualiza sola cada 30 min; aquí se ve cuánto hace y Recargar trae lo último publicado.
+const haceTexto = () => {
+  if (!D.generado_utc) return '';
+  const min = Math.max(0, Math.round((Date.now() - Date.parse(D.generado_utc)) / 60000));
+  return min < 1 ? 'recién' : `hace ${duracion(min)}`;
+};
 for (const [dt, dd] of [['Jornada', D.fecha], ['Actualizado', D.generado + ' (Panamá)'], ['Lesiones', D.reporte_lesiones]])
-  if (dd) estado.append(el('div', {}, el('dt', {}, dt), el('dd', {}, dd)));
+  if (dd) estado.append(el('div', {}, el('dt', {}, dt), el('dd', {}, dd, dt === 'Actualizado' ? el('span', {class: 'hace', id: 'hace'}, ', ' + haceTexto()) : null)));
+document.getElementById('recargar').addEventListener('click', e => {
+  e.currentTarget.setAttribute('aria-busy', 'true');
+  e.currentTarget.textContent = 'Cargando...';
+  // Dirección nueva para saltarse la caché de GitHub Pages (hasta 10 min).
+  location.replace(location.pathname + '?t=' + Date.now() + location.hash);
+});
 
 // Reloj: cuenta regresiva hasta el inicio y, ya empezado, minutos desde el comienzo (reloj real, no el del partido).
-const duracion = m => m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')}` : `${m} min`;
 function relojEstado(iso, est) {
   if (est === 'final') return ['final', 'Final'];
   if (!iso) return ['', ''];
@@ -211,6 +225,7 @@ const reloj = p => {
   const [clase, texto] = relojEstado(p.inicio, p.estado);
   return el('span', {class: 'reloj ' + clase, 'data-inicio': p.inicio || '', 'data-estado': p.estado || ''}, texto);
 };
+setInterval(() => { const h = document.getElementById('hace'); if (h) h.textContent = ', ' + haceTexto(); }, 30000);
 setInterval(() => document.querySelectorAll('.reloj').forEach(n => {
   const [clase, texto] = relojEstado(n.dataset.inicio, n.dataset.estado);
   n.className = 'reloj ' + clase; n.textContent = texto;

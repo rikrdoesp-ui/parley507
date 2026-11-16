@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.14 — 2026-11-15
+
+- Actualización automática: tarea de Windows "Parley507 actualizar" cada 30 min de 10:00 a 01:00, sin ventana
+  (`tools/instalar_tarea.ps1`; registro en `~/sports-data/actualizar_auto.log`). Necesita la PC encendida y la sesión
+  iniciada.
+- Página: botón Recargar (se salta la caché de GitHub Pages) y "hace X min" junto a la hora de actualización.
+
 ## v0.1.13 — 2026-11-15
 
 - Resultados: cada actualización califica las proyecciones de los días ya jugados contra el box score (la última

@@ -13,6 +13,7 @@ from pathlib import Path
 import pandas as pd
 
 from . import config, marca
+from . import db
 from .db import clave_nombre
 from .nba import lesiones, modelo, proyeccion, resultados
 from .nba import props as props_nba
@@ -166,6 +167,7 @@ def datos(con, fecha: str) -> dict:
                           (fecha,)).fetchone()[0]
     return {
         "fecha": fecha, "generado": datetime.now(config.PANAMA).strftime("%d-%m-%Y %H:%M"),
+        "generado_utc": db.ahora_utc(),
         "modelo": config.MODELO_NBA, "corte": limpio(pred.data_cutoff.max()) if not pred.empty else None,
         "reporte_lesiones": reporte,
         "partidos": [{"hora": hora_panama(r.start_time_utc), "p": r.partido, "estado": r.status,
