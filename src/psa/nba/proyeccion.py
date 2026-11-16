@@ -13,8 +13,11 @@ MINUTOS_INESTABLES = 6.0  # Desviación de minutos (L10) a partir de la cual se 
 
 
 def historial(con) -> pd.DataFrame:
-    return modelo.agregar_combos(pd.read_sql("""SELECT game_id, player_id, team_id, season, game_date, minutes, points,
-                                                rebounds, assists FROM nba_player_game_stats""", con))
+    # Solo partidos terminados: el game log de la NBA trae parciales de los que están en juego.
+    return modelo.agregar_combos(pd.read_sql("""SELECT s.game_id, s.player_id, s.team_id, s.season, s.game_date, s.minutes,
+                                                s.points, s.rebounds, s.assists FROM nba_player_game_stats s
+                                                LEFT JOIN games g ON g.game_id = s.game_id
+                                                WHERE COALESCE(g.status, 'final') = 'final'""", con))
 
 
 def k_vigente(con) -> tuple[dict, str]:

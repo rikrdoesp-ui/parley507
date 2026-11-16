@@ -52,7 +52,8 @@ def calificar(con) -> pd.DataFrame:
                            LEFT JOIN teams h ON h.team_id = g.home_team_id LEFT JOIN teams a ON a.team_id = g.away_team_id
                            JOIN nba_player_game_stats s ON s.game_id = p.game_id AND s.player_id = p.player_id
                            JOIN players pl ON pl.player_id = p.player_id
-                           WHERE p.scenario = 'base' AND p.projected_mean IS NOT NULL AND s.minutes > 0""", con)
+                           WHERE p.scenario = 'base' AND p.projected_mean IS NOT NULL AND s.minutes > 0
+                             AND g.status = 'final'  -- En juego, el box score es parcial.""", con)
     if pred.empty:
         return pred
     # Se prefiere la última hecha antes del inicio; si todas son de después, la primera (los datos del modelo

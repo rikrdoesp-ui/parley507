@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.1.21 — 2026-11-15
+
+- Corrección: el game log de la NBA trae box scores parciales de los partidos en juego, y la app los trataba como
+  terminados (ATL @ MIL tenía 372 de 480 minutos y OKC @ SAC 204). Ahora el historial del modelo, la calificación
+  de props y la de parleys usan solo partidos con estado final; lo que está en juego queda pendiente.
+- Con eso cambian las cifras del 15-11: props con línea 81 de 167 (48 %, no 54 %); parleys revisados a mano 2 de 7
+  decididos (se esperaban 2,2), ATL @ MIL y OKC @ SAC pendientes. Los titulares de 32+ min quedaron 2,4 PRA bajo lo
+  proyectado, no 6. Las mejoras de v0.1.18 no cambian: salieron del backtest, que usa temporadas completas.
+- Stake aún no publica props del 16-11; se leen cuando aparezcan.
+
 ## v0.1.20 — 2026-11-15
 
 - Ficha del jugador: columna "Prop real" con la línea de Stake y su cuota en el lado más probable (o "Sin Stake"),

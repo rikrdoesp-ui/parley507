@@ -223,8 +223,8 @@ def test_calificar_usa_la_proyeccion_previa_y_guarda_el_factor_usado(tmp_path):
     from psa.nba import resultados
     con = db.conectar(tmp_path / "t.sqlite")
     con.execute("INSERT INTO players VALUES (1, 'Ana Pérez', 'ana perez')")
-    con.execute("INSERT INTO games(game_id, season, season_type, game_date, start_time_utc) "
-                "VALUES ('g1', '2026-27', 'Regular', '2026-11-14', '2026-11-15T00:00:00+00:00')")
+    con.execute("INSERT INTO games(game_id, season, season_type, game_date, start_time_utc, status) "
+                "VALUES ('g1', '2026-27', 'Regular', '2026-11-14', '2026-11-15T00:00:00+00:00', 'en vivo')")
     con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, "
                 "rebounds, assists, source_id) VALUES ('g1', 1, 9, '2026-27', '2026-11-14', 30, 25, 5, 4, 0)")
     for generado, media in (("2026-11-14T20:00:00+00:00", 22.0), ("2026-11-15T03:00:00+00:00", 99.0)):  # Antes / después.
@@ -234,6 +234,8 @@ def test_calificar_usa_la_proyeccion_previa_y_guarda_el_factor_usado(tmp_path):
     con.execute("INSERT INTO player_props(game_date, player_id, player_name, market, line, over_odds, under_odds, "
                 "bookmaker, captured_at, entry_method) VALUES ('2026-11-14', 1, 'Ana Pérez', 'puntos', 19.5, 1.9, 1.9, "
                 "'Stake', 'x', 'MANUAL')")
+    assert resultados.calificar(con).empty  # En juego: el box score es parcial y no se califica.
+    con.execute("UPDATE games SET status = 'final' WHERE game_id = 'g1'")
     df = resultados.calificar(con)
     assert len(df) == 1
     fila = df.iloc[0]
@@ -312,6 +314,10 @@ def test_parleys_se_guardan_antes_del_inicio_y_se_califican(tmp_path):
     con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, rebounds,"
                 " assists, source_id) VALUES ('g', 1, 9, '2026-27', '2026-11-14', 30, 20, 8, 5, 0),"
                 " ('g', 2, 9, '2026-27', '2026-11-14', 25, 10, 4, 2, 0)")
+    con.execute("INSERT INTO games(game_id, season, season_type, game_date, status) VALUES ('g', '2026-27', 'Regular', "
+                "'2026-11-14', 'en vivo')")
+    assert combinadas.calificar(con)["parleys"][0]["estado"] == "pendiente"  # Parcial: no se califica.
+    con.execute("UPDATE games SET status = 'final'")
     r = combinadas.calificar(con)
     assert r["parleys"][0]["legs"][0]["real"] == 33 and r["parleys"][0]["estado"] == "gano"
     assert (r["decididos"], r["ganados"], r["esperados"]) == (1, 1, 0.36)

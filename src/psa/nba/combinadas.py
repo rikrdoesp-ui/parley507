@@ -118,7 +118,8 @@ def calificar(con) -> dict:
         for l in legs:
             stat = config.MERCADOS_NBA[l["mercado"].lower()]
             valor = con.execute(f"""SELECT {'+'.join(_partes(stat))}, s.minutes FROM nba_player_game_stats s
-                                    JOIN players p USING(player_id) WHERE p.full_name = ? AND s.game_date = ?""",
+                                    JOIN players p USING(player_id) JOIN games g ON g.game_id = s.game_id
+                                    WHERE p.full_name = ? AND s.game_date = ? AND g.status = 'final'""",
                                 (l["j"], fecha)).fetchone()
             l["real"] = None if not valor or not valor[1] else valor[0]
             l["ok"] = None if l["real"] is None or l["real"] == l["linea"] else (
