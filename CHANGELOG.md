@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.26 — 2026-11-16
+
+- Jugadores: separados por partido y, dentro, por equipo (en PC los dos equipos lado a lado).
+- Cada ficha sugiere el prop "Más probable" del jugador: el de mayor probabilidad entre sus líneas de Stake, con
+  cuota, cuántas veces cumplió en sus últimos 10 y VE; sin Stake, el de su línea de referencia, marcado como tal.
+
 ## v0.1.25 — 2026-11-16
 
 - Resultados: "Parleys sugeridos" muestra los de días ya jugados (por fecha) con el valor real de cada leg; los de
