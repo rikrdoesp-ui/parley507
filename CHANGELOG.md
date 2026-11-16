@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.22 — 2026-11-15
+
+- En PC (1100 px o más) la página usa el ancho: hasta 1320 px, jugadores, props, parleys, resultados por partido y
+  modelo en 2 columnas, y partidos y lesiones en 3. En el celular no cambia.
+- Props: ahora también muestra las áreas de PRA, PR y RA cuando hay línea.
+
 ## v0.1.21 — 2026-11-15
 
 - Corrección: el game log de la NBA trae box scores parciales de los partidos en juego, y la app los trataba como

@@ -38,6 +38,15 @@ body{margin:0;background:var(--fondo);color:var(--tinta);font:16px/1.45 var(--te
 a{color:inherit}
 :focus-visible{outline:2px solid var(--under);outline-offset:2px;border-radius:4px}
 .envoltura{max-width:720px;margin:0 auto;padding:0 16px}
+/* En PC se aprovecha el ancho: listas en columnas en vez de una sola tira angosta al centro. */
+.rejilla>.vacio,.rejilla>.nota{grid-column:1/-1}
+@media (min-width:1100px){
+  .envoltura{max-width:1320px}
+  .rejilla{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:0 40px;align-items:start}
+  .rejilla.tres{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .rejilla>details.bloque{margin-bottom:16px}
+  .partido:nth-child(-n+3){border-top:1px solid var(--regla)}
+}
 
 /* Cabecera: el nombre como rótulo de camiseta; el estado del día en pares dato-valor. */
 header{padding:18px 0 10px}
@@ -334,21 +343,23 @@ function vistaJuego(nombre) {
   if (mejores.some(x => x.p.tipo === 'real') && !mejores.some(x => x.p.ve > 0))
     out.push(el('div', {class: 'aviso'}, 'Ninguna línea de Stake tiene ventaja (VE positivo): son las que el modelo inclina a favor, pero el margen de la casa las deja en negativo.'));
   if (!mejores.length) out.push(el('p', {class: 'suave'}, 'Ninguna prop destaca en este partido.'));
-  for (const {j, k, p: q} of mejores) out.push(filaProp({jugador: j.j, lado: q.lado, linea: q.linea, prob: q.p_lado,
+  const empuja = el('div', {class: 'rejilla'});
+  out.push(empuja);
+  for (const {j, k, p: q} of mejores) empuja.append(filaProp({jugador: j.j, lado: q.lado, linea: q.linea, prob: q.p_lado,
     mercado: q.p_mercado, cuota: q.tipo === 'real' && !String(q.casa).startsWith('Consenso') ? q.cuota : null, valor: q.ve,
     media: q.media, minutos: j.min, etiqueta: (['pra', 'pr', 'ra'].includes(k) ? NOMBRES[k] : NOMBRES[k].toLowerCase()) + (q.tipo === 'ref' ? '*' : ''),
     notas: [['Out', 'Doubtful', 'Questionable'].includes(j.est) ? j.est : '', j.sd > 6 ? 'minutos inestables' : '',
       j.notas.includes('riesgo de paliza') ? 'riesgo de paliza' : ''].filter(Boolean).join(', ')}));
   out.push(el('p', {class: 'nota'}, 'Con línea real, la probabilidad parte del mercado sin margen (la marca fina de la barra) y el modelo la mueve como mucho 4 puntos, porque todavía no le gana al mercado. VE es esa probabilidad por la cuota, menos 1. Con * la línea es de referencia (media de los últimos 10, sin cuota): solo indica hacia dónde se inclina el modelo. BET o PASS lo decide /parley.'));
-  for (const equipo of [...new Set(jug.map(j => j.eq))])
-    out.push(el('h2', {class: 'equipo'}, equipo), ...jug.filter(j => j.eq === equipo).map(fichaJugador));
+  out.push(el('div', {class: 'rejilla'}, ...[...new Set(jug.map(j => j.eq))].map(equipo =>
+    el('section', {}, el('h2', {class: 'equipo'}, equipo), ...jug.filter(j => j.eq === equipo).map(fichaJugador)))));
   return out;
 }
 
 const vistas = {
   Partidos() {
     if (!D.partidos.length) return [el('p', {class: 'vacio'}, 'No hay partidos NBA este día.')];
-    return [el('div', {}, ...D.partidos.map(p => el('a', {class: 'partido', href: '#juego=' + encodeURIComponent(p.p),
+    return [el('div', {class: 'rejilla tres'}, ...D.partidos.map(p => el('a', {class: 'partido', href: '#juego=' + encodeURIComponent(p.p),
       'aria-label': `${p.p.replace(' @ ', ' visita a ')}, ${p.hora} hora de Panamá`},
       cruce(p.p), reloj(p),
       el('div', {class: 'detalle'}, el('span', {}, `${p.hora} hora de Panamá`), p.marcador ? el('span', {}, `Final ${p.marcador}`) : '',
@@ -370,6 +381,7 @@ const vistas = {
       grupos.get(clave).push(p);
     }
     const proximo = D.partidos.find(j => j.inicio && Date.parse(j.inicio) > Date.now() && (grupos.get(j.p) || []).length);
+    const bloques = el('div', {class: 'rejilla'});
     for (const [nombre, lista] of grupos) {
       if (!lista.length) continue;
       const juego = D.partidos.find(x => x.p === nombre);
@@ -377,7 +389,7 @@ const vistas = {
         el('summary', {}, cruce(nombre), juego ? reloj(juego) : '',
           el('div', {class: 'detalle'}, juego ? el('span', {}, `${juego.hora} hora de Panamá`) : '', el('span', {}, `${lista.length} líneas`))));
       if (proximo && proximo.p === nombre) bloque.open = true;
-      for (const mercado of ['puntos', 'rebotes', 'asistencias']) for (const lado of ['over', 'under']) {
+      for (const mercado of ['puntos', 'rebotes', 'asistencias', 'pra', 'pr', 'ra']) for (const lado of ['over', 'under']) {
         const filas = lista.filter(p => p.mercado === mercado && !vacio(p['P ' + lado]))
           .map(p => {
             const mo = p['P mercado over (sin margen)'];
@@ -398,8 +410,9 @@ const vistas = {
       }
       const sin = lista.filter(p => vacio(p['P over']));
       if (sin.length) bloque.append(el('p', {class: 'nota'}, `Sin proyección: ${sin.map(p => `${p.jugador} (${p.mercado})`).join(', ')}.`));
-      out.push(bloque);
+      bloques.append(bloque);
     }
+    out.push(bloques);
     out.push(el('p', {class: 'nota'}, 'La barra es la probabilidad de que la prop salga; la marca fina es lo que dice el mercado sin margen. El modelo mueve esa probabilidad como mucho 4 puntos. VE es la ganancia esperada por cada $1 y solo existe con precio de una casa: el consenso de BettingPros es referencia.'));
     return out;
   },
@@ -409,6 +422,7 @@ const vistas = {
       el('details', {class: 'escenarios'}, el('summary', {}, 'Cómo se eligen'),
         el('p', {class: 'nota'}, 'Jugador confirmado, 20+ minutos estables, cumplió 6 de sus últimos 10, 55 % o más, un leg por jugador y máximo 2 por equipo. Se calcula como si los legs fueran independientes; en un mismo partido no lo son del todo y Stake paga menos en "mismo juego". VE es la ganancia esperada por cada $1. Apostar o no, y cuánto, lo decide /parley.'))];
     const partidos = [...new Set(D.parleys.map(x => x.partido))];
+    const bloques = el('div', {class: 'rejilla'});
     partidos.forEach((nombre, i) => {
       const info = D.partidos.find(x => x.p === nombre) || {};
       const bloque = el('details', {class: 'bloque'}, el('summary', {}, cruce(nombre), reloj(info)));
@@ -423,8 +437,9 @@ const vistas = {
             el('span', {class: 'leg-p'}, `${pct(l.prob)} a ${num(l.cuota, 2)}`)),
           el('p', {class: 'por-que'}, l.por_que)))));
       }
-      out.push(bloque);
+      bloques.append(bloque);
     });
+    out.push(bloques);
     if (!D.parleys.some(x => x.ve > 0)) out.splice(1, 0, el('div', {class: 'aviso'}, 'Hoy ningún parley tiene ventaja: el margen de Stake se suma en cada leg. Son los más probables, no apuestas de valor.'));
     return out;
   },
@@ -432,7 +447,7 @@ const vistas = {
     const buscar = el('input', {type: 'search', placeholder: 'Buscar jugador', 'aria-label': 'Buscar jugador'});
     const partido = el('select', {'aria-label': 'Partido'}, el('option', {value: ''}, 'Todos los partidos'),
       ...D.partidos.map(p => el('option', {value: p.p}, p.p)));
-    const lista = el('div');
+    const lista = el('div', {class: 'rejilla'});
     const pintar = () => {
       const q = buscar.value.trim().toLowerCase();
       const filas = D.jugadores.filter(j => (!q || j.j.toLowerCase().includes(q)) && (!partido.value || j.p === partido.value));
@@ -445,14 +460,15 @@ const vistas = {
   },
   Lesiones() {
     if (!D.lesiones.length) return [el('p', {class: 'vacio'}, 'No hay reporte de lesiones para este día.')];
-    const out = [];
+    const out = el('div', {class: 'rejilla tres'});
     for (const equipo of [...new Set(D.lesiones.map(l => l.eq))]) {
-      out.push(el('h2', {class: 'equipo'}, equipo || 'Sin equipo'));
-      for (const l of D.lesiones.filter(x => x.eq === equipo)) out.push(el('div', {class: 'lesion'},
+      const sec = el('section', {}, el('h2', {class: 'equipo'}, equipo || 'Sin equipo'));
+      out.append(sec);
+      for (const l of D.lesiones.filter(x => x.eq === equipo)) sec.append(el('div', {class: 'lesion'},
         el('span', {}, l.j), el('span', {class: 'estado-lesion ' + l.est}, l.est + (l.manual ? ' (manual)' : '')),
         el('span', {class: 'motivo'}, l.motivo.replace('Injury/Illness-', '').replace(/([a-z])([A-Z])/g, '$1 $2').replace(/;/g, '; '))));
     }
-    return out;
+    return [out];
   },
   Resultados() {
     const r = D.resultados, ln = r && r.lineas, pr = D.parleys_resultados;
@@ -476,7 +492,7 @@ const vistas = {
         el('td', {class: x.ok ? 'gano' : 'perdio'}, `${x.real} ${x.ok ? '✓' : '✗'}`))));
     const cuenta = legs => `${legs.filter(x => x.ok).length} de ${legs.length}`;
     let modo = 'partido'; try { modo = localStorage.getItem('resultados') || 'partido'; } catch (e) {}
-    const cuerpo = el('div', {});
+    const cuerpo = el('div', {});  // Por partido va en rejilla (ver pintar).
     const botones = [['partido', 'Por partido'], ['prob', 'De mayor a menor']].map(([valor, texto]) => {
       const b = el('button', {type: 'button', 'aria-pressed': String(valor === modo)}, texto);
       b.addEventListener('click', () => { modo = valor; try { localStorage.setItem('resultados', valor); } catch (e) {} pintar(); });
@@ -484,6 +500,7 @@ const vistas = {
     });
     function pintar() {
       botones.forEach((b, i) => b.setAttribute('aria-pressed', String(['partido', 'prob'][i] === modo)));
+      cuerpo.className = modo === 'prob' ? '' : 'rejilla';
       if (modo === 'prob') { cuerpo.replaceChildren(tabla(ln.ultimos, true)); return; }
       const grupos = new Map();
       for (const x of ln.ultimos) { const k = `${x.f}|${x.partido}`; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(x); }
@@ -524,7 +541,7 @@ const vistas = {
         el('tr', {}, el('td', {}, 'Mercado'), el('td', {}, num(l.comparables_brier_mercado, 3))),
         el('tr', {}, el('td', {}, '/parley'), el('td', {}, num(l.comparables_brier_parley, 3)))),
       el('p', {class: 'nota'}, `${l.legs_comparables} de 100 legs comparables. ` + (l.muestra_suficiente ? 'Ya hay muestra para decidir.' : 'Hasta llegar a 100, la app es solo informativa.'))));
-    return out;
+    return [out[0], el('div', {class: 'rejilla'}, ...out.slice(1))];
   },
 };
 
