@@ -158,6 +158,7 @@ h2.seccion{font:700 22px/1.1 var(--cond);margin:26px 0 4px}
 .visor .pie{display:flex;justify-content:space-between;gap:12px;padding:12px 16px;font-size:14px}
 .visor .pie strong{font:600 22px/1 var(--cond)}
 .visor .cerrar{position:absolute;top:8px;right:8px;width:44px;height:44px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font-size:26px;line-height:1;cursor:pointer}
+.ficha .dorsal-jugador{color:var(--suave);font-weight:500}
 .ficha .rol{display:block;font:500 13px/1.3 var(--texto);color:var(--over);margin-top:3px}
 .ficha .rol.suplente{color:var(--suave)}
 .sugerida{display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px;margin:8px 0 2px;padding:7px 10px;border-radius:8px;
@@ -307,7 +308,9 @@ function propReal(p) {
   const stake = p.tipo === 'real' && p.casa && !p.casa.startsWith('Consenso') && p.alto;
   return [stake ? el('span', {class: 'lado-' + p.alto.lado}, `${LADO(p.alto.lado)} ${num(p.linea)}`, p.alto.cuota ? ` a ${num(p.alto.cuota, 2)}` : '')
                 : el('span', {class: 'suave'}, 'Sin Stake'),
-    p.segura ? el('span', {class: 'bajo'}, `Segura: ${LADO(p.segura.lado)} ${num(p.segura.linea)}, ${pct(p.segura.p)}`) : ''];
+    // Con alternas de Stake la segura es una línea real con cuota; sin ellas, la del modelo (sin cuota).
+    p.segura ? el('span', {class: 'bajo'}, `Segura: ${LADO(p.segura.lado)} ${num(p.segura.linea)}` +
+      (p.segura.real ? ` a ${num(p.segura.cuota, 2)}, ${pct(p.segura.p)}` : `, ${pct(p.segura.p)} (modelo)`)) : ''];
 }
 
 // Foto oficial de la NBA; si no carga, se quita sin dejar hueco.
@@ -337,6 +340,15 @@ const rolJugador = j => j.rol === 'titular' ? el('span', {class: 'rol'}, j.alin 
 
 // El prop con más probabilidad de salir: primero entre las líneas de Stake (con cuota), si no, entre las de referencia.
 function sugerida(j) {
+  // Con líneas alternas de Stake: la línea real más probable del jugador entre todos sus mercados.
+  const reales = MERCADOS.filter(k => j.props[k] && j.props[k].segura && j.props[k].segura.real).map(k => ({k, s: j.props[k].segura, p: j.props[k]}));
+  if (reales.length) {
+    const {k, s, p} = reales.reduce((a, b) => b.s.p > a.s.p ? b : a);
+    return el('div', {class: 'sugerida ' + s.lado}, el('span', {class: 'etiqueta'}, 'Más segura'),
+      el('strong', {}, `${NOMBRES[k]} ${LADO(s.lado)} ${num(s.linea)}`), el('span', {}, `a ${num(s.cuota, 2)}, ${pct(s.p)}`),
+      el('span', {class: 'suave'}, `cumplió ${s.aciertos} de ${Math.min(10, (p.aciertos || [0, 10])[1])}`),
+      vacio(s.ve) ? '' : el('span', {class: signo(s.ve)}, `VE ${ve(s.ve)}`));
+  }
   const todos = MERCADOS.filter(k => j.props[k] && j.props[k].alto).map(k => ({k, p: j.props[k]}));
   const stake = todos.filter(x => x.p.tipo === 'real' && x.p.casa && !x.p.casa.startsWith('Consenso') && x.p.alto.cuota);
   const lista = stake.length ? stake : todos;
@@ -363,7 +375,7 @@ function fichaJugador(j) {
         !p.alto || vacio(p.alto.ve) ? '' : el('span', {class: 'bajo ' + signo(p.alto.ve)}, `VE ${ve(p.alto.ve)}`)));
   });
   const f = el('div', {class: 'ficha'},
-    el('div', {class: 'encabezado'}, foto(j), el('span', {class: 'nombre'}, j.j, rolJugador(j)),
+    el('div', {class: 'encabezado'}, foto(j), el('span', {class: 'nombre'}, j.j, j.num ? el('span', {class: 'dorsal-jugador'}, ` #${j.num}`) : '', rolJugador(j)),
       j.est ? el('span', {class: 'estado-lesion ' + j.est}, j.est) : ''),
     el('div', {class: 'datos'}, el('span', {}, `${num(j.min)} min proyectados`), j.sd ? el('span', {}, `desviación ${num(j.sd)}`) : '',
       el('span', {}, `${j.n} partidos de muestra`)),
@@ -478,30 +490,33 @@ const vistas = {
     return out;
   },
   Parley() {
-    if (!D.parleys || !D.parleys.length) return [el('p', {class: 'vacio'}, 'Ningún leg pasa hoy los filtros. Aparecen cuando hay líneas de Stake con 55 % o más.')];
-    const out = [el('p', {class: 'nota'}, 'Los legs más probables de cada partido con líneas de Stake. Juégalo solo si Stake paga al menos la cuota justa.'),
+    const P = D.parleys || {}, uno = P.uno || {legs: [], escalera: []}, dos = P.dos || {grupos: [], escalera: []};
+    if (!uno.legs.length) return [el('p', {class: 'vacio'}, 'Ningún leg pasa hoy los filtros. Aparecen cuando hay líneas de Stake con 55 % o más.')];
+    // Un leg: quién, qué línea (ajustada si no es la que Stake muestra por defecto), probabilidad y cuota.
+    const leg = (l, n) => el('div', {class: 'leg ' + l.lado},
+      el('div', {class: 'leg-linea'}, el('strong', {}, n ? `${n}. ${l.j}` : l.j),
+        el('span', {}, `${l.mercado} ${l.lado} ${l.linea}`), el('span', {class: 'leg-p'}, `${pct(l.prob)} a ${num(l.cuota, 2)}`)),
+      el('p', {class: 'por-que'}, `${l.p}. Cumplió ${l.aciertos[0]} de ${l.aciertos[1]}; proyección ${num(l.media)} en ${num(l.min, 0)} min.` +
+        (l.principal ? '' : ' Línea ajustada con la flecha de Stake.')));
+    const escalera = (filas, primera, etiqueta) => el('table', {},
+      el('tr', {}, el('th', {}, primera), el('th', {}, 'Prob.'), el('th', {}, 'Cuota'), el('th', {}, 'Justa')),
+      ...filas.map(e => el('tr', {}, el('td', {}, etiqueta(e)), el('td', {class: 'proy'}, pct(e.prob)),
+        el('td', {}, num(e.cuota, 2)), el('td', {}, num(e.justa, 2)))));
+    const out = [el('p', {class: 'nota'}, `Armados con ${D.lineas_stake || 0} líneas de Stake, alternas incluidas. Cada leg que agregas baja la probabilidad: la escalera muestra cuánto.`),
       el('details', {class: 'escenarios'}, el('summary', {}, 'Cómo se eligen'),
-        el('p', {class: 'nota'}, 'Jugador confirmado, 20+ minutos estables, cumplió 6 de sus últimos 10, 55 % o más, un leg por jugador y máximo 2 por equipo. Se calcula como si los legs fueran independientes; en un mismo partido no lo son del todo y Stake paga menos en "mismo juego". VE es la ganancia esperada por cada $1. Apostar o no, y cuánto, lo decide /parley.'))];
-    const partidos = [...new Set(D.parleys.map(x => x.partido))];
-    const bloques = el('div', {class: 'rejilla'});
-    partidos.forEach((nombre, i) => {
-      const info = D.partidos.find(x => x.p === nombre) || {};
-      const bloque = el('details', {class: 'bloque'}, el('summary', {}, cruce(nombre), reloj(info)));
-      if (i === 0) bloque.open = true;
-      for (const x of D.parleys.filter(y => y.partido === nombre)) {
-        const cabeza = el('div', {class: 'parley-cabeza'},
-          el('span', {class: 'titulo'}, `${x.legs.length} legs`),
-          el('span', {}, `Prob. ${pct(x.prob, 1)}`), el('span', {}, `Cuota Stake ${num(x.cuota, 2)}`),
-          el('span', {}, `Justa ${num(x.cuota_justa, 2)}`), el('span', {class: signo(x.ve)}, `VE ${ve(x.ve)}`));
-        bloque.append(el('div', {class: 'combinada'}, cabeza, ...x.legs.map(l => el('div', {class: 'leg ' + l.lado},
-          el('div', {class: 'leg-linea'}, el('strong', {}, l.j), el('span', {}, `${l.mercado} ${l.lado} ${l.linea}`),
-            el('span', {class: 'leg-p'}, `${pct(l.prob)} a ${num(l.cuota, 2)}`)),
-          el('p', {class: 'por-que'}, l.por_que)))));
-      }
-      bloques.append(bloque);
-    });
-    out.push(bloques);
-    if (!D.parleys.some(x => x.ve > 0)) out.splice(1, 0, el('div', {class: 'aviso'}, 'Hoy ningún parley tiene ventaja: el margen de Stake se suma en cada leg. Son los más probables, no apuestas de valor.'));
+        el('p', {class: 'nota'}, 'El leg más probable de cada jugador entre todas sus líneas de Stake: jugador confirmado, 20+ minutos estables, cumplió 6 de sus últimos 10 a esa línea, 55 % o más y un leg por jugador. La probabilidad parte del mercado sin margen y el modelo la mueve como mucho 4 puntos. Justa es lo mínimo que debería pagar; Stake siempre paga menos por su margen. Apostar o no, y cuánto, lo decide /parley.')),
+      el('div', {class: 'rejilla'},
+        el('section', {}, el('h2', {class: 'seccion'}, '1 prop por juego'),
+          el('p', {class: 'nota'}, 'El mejor prop de cada partido, del más al menos probable. El parley de N legs son los primeros N.'),
+          escalera(uno.escalera, 'Legs', e => `Los primeros ${e.n}`),
+          el('div', {class: 'combinada'}, ...uno.legs.map((l, i) => leg(l, i + 1)))),
+        el('section', {}, el('h2', {class: 'seccion'}, '2 props por juego'),
+          el('p', {class: 'nota'}, 'El mejor par de cada partido. Si mezclas partidos, cada uno lleva sus 2. En "mismo juego" Stake paga menos que la cuota mostrada.'),
+          escalera(dos.escalera, 'Partidos', e => `${e.partidos} (${e.n} legs)`),
+          ...dos.grupos.map((g, i) => el('div', {class: 'combinada'},
+            el('div', {class: 'parley-cabeza'}, el('span', {class: 'titulo'}, `${i + 1}. `, cruce(g.partido)),
+              el('span', {}, `Prob. ${pct(g.prob, 1)}`), el('span', {}, `Cuota ${num(g.cuota, 2)}`), el('span', {}, `Justa ${num(g.justa, 2)}`)),
+            ...g.legs.map(l => leg(l))))))];
     return out;
   },
   Jugadores() {
@@ -545,13 +560,16 @@ const vistas = {
     const lista = !pr ? [] : pr.parleys.filter(x => x.estado !== 'pendiente' || x.f < D.fecha);
     const resumen = [];
     if (pr && pr.decididos) resumen.push(`Propuestos antes del partido: ganaron ${pr.ganados} de ${pr.decididos}; por su probabilidad se esperaban ${num(pr.esperados, 1)}.`);
+    for (const [tipo, c] of Object.entries((pr && pr.por_tipo) || {})) if (c.decididos && tipo !== 'un partido')
+      resumen.push(`Con ${tipo}: ${c.ganados} de ${c.decididos} (esperados ${num(c.esperados, 1)}).`);
     if (pr && pr.tarde && pr.tarde.decididos) resumen.push(`Propuestos con el partido ya empezado (no cuentan en el registro): ganaron ${pr.tarde.ganados} de ${pr.tarde.decididos}; se esperaban ${num(pr.tarde.esperados, 1)}.`);
     const fechas = [...new Set(lista.map(x => x.f))];
     const secParleys = !lista.length ? [] : [el('h2', {class: 'seccion'}, 'Parleys sugeridos'),
       el('p', {class: 'nota'}, resumen.join(' ') || 'Todavía no termina ningún partido con parley sugerido.'),
       ...fechas.map(f => el('section', {}, el('h3', {class: 'dia'}, `${f.slice(8)}/${f.slice(5, 7)}`),
         el('div', {class: 'rejilla'}, ...lista.filter(x => x.f === f).map(x => el('div', {class: 'combinada'},
-          el('div', {class: 'parley-cabeza'}, cruce(x.partido), el('span', {class: 'titulo'}, `${x.tam} legs`),
+          el('div', {class: 'parley-cabeza'}, x.tipo === 'un partido' ? cruce(x.partido) : el('span', {}, x.tipo[0].toUpperCase() + x.tipo.slice(1)),
+            el('span', {class: 'titulo'}, `${x.tam} legs`),
             el('span', {}, `prob. ${pct(x.prob)}, cuota ${num(x.cuota, 2)}`),
             el('span', {class: 'estado-parley ' + x.estado}, ESTADO[x.estado])),
           x.tarde ? el('div', {class: 'suave pequeno'}, 'Propuesto con el partido ya empezado') : '',
@@ -590,7 +608,14 @@ const vistas = {
       }));
     }
     pintar();
-    return [...secParleys, el('h2', {class: 'seccion'}, 'Props'),
+    // ¿Un leg de 75 % cumple 75 %? Con todas las líneas de Stake ya jugadas, alternas incluidas.
+    const cal = (r.calibracion || []);
+    const secCal = !cal.length ? [] : [el('h2', {class: 'seccion'}, '¿Cumplen lo que dicen?'),
+      el('p', {class: 'nota'}, 'Lado favorito de cada línea de Stake ya jugada, alternas incluidas, según la probabilidad que usan los parleys. Si "Cumplió" queda por debajo de "Esperado", esos legs prometen de más.'),
+      el('table', {}, el('tr', {}, el('th', {}, 'Probabilidad'), el('th', {}, 'Líneas'), el('th', {}, 'Cumplió'), el('th', {}, 'Esperado')),
+        ...cal.map(c => el('tr', {}, el('td', {}, `${Math.round(c.de * 100)} a ${Math.round(Math.min(c.a, 1) * 100)} %`), el('td', {}, String(c.n)),
+          el('td', {class: 'proy'}, pct(c.aciertos / c.n)), el('td', {}, pct(c.esperados / c.n)))))];
+    return [...secParleys, ...secCal, el('h2', {class: 'seccion'}, 'Props'),
       el('p', {class: 'nota'}, `Si se dieron o no las props con línea guardada, en el lado que el modelo veía más probable. Acertó ${ln.aciertos} de ${ln.n} (${pct(ln.aciertos / ln.n)}).` +
         (ln.n_mercado ? ` Error de probabilidad (Brier, menor es mejor): modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)}.` : '')),
       el('div', {class: 'selector', role: 'group', 'aria-label': 'Ordenar resultados'}, ...botones), cuerpo];

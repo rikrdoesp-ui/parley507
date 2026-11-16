@@ -201,7 +201,8 @@ def correr(con) -> dict:
     con.execute("INSERT INTO model_runs(sport, model_version, training_cutoff, params_json, metrics_json, created_at)"
                 " VALUES ('NBA', ?, ?, ?, ?, ?)",
                 (config.MODELO_NBA, str(df.game_date.max()),
-                 json.dumps({"k": k_final, "capa": capa_final, "vida_minutos": modelo.VIDA_MINUTOS, "vida_tasa": modelo.VIDA_TASA,
+                 json.dumps({"k": k_final, "capa": capa_final, "correlacion": modelo.correlaciones(final, k_final),
+                             "vida_minutos": modelo.VIDA_MINUTOS, "vida_tasa": modelo.VIDA_TASA,
                              "muestra_minima": modelo.MUESTRA_MINIMA, "fraccion_minutos": fraccion, "alfa_uso": alfa}),
                  json.dumps(resultado), db.ahora_utc()))
     con.commit()

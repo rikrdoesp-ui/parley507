@@ -16,9 +16,10 @@ import numpy as np
 import pandas as pd
 
 from .. import config, db, odds
-from . import modelo
+from . import modelo, props
 
 VERSION = "nba-sesgo-0.1"
+TRAMOS = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 1.01]  # Probabilidad del lado favorito, para la calibración.
 MUESTRA_CONFIANZA = 1500  # Con esta cantidad de proyecciones calificadas, el factor se aplica a la mitad.
 TOPE_FACTOR = 0.10
 ULTIMOS_LEGS = 400  # Los legs de los días más recientes, para verlos por partido.
@@ -67,7 +68,17 @@ def calificar(con) -> pd.DataFrame:
 
     lineas = pd.read_sql("""SELECT game_date, player_id, market, line, over_odds, under_odds, bookmaker, captured_at
                             FROM player_props WHERE player_id IS NOT NULL""", con)
-    lineas = lineas.sort_values("captured_at").groupby(["game_date", "player_id", "market", "line"]).tail(1)
+    # De Stake, solo la última lectura de cada día (como la página): una línea que quitó antes no se jugó.
+    stake = lineas.bookmaker == "Stake"
+    ultima = lineas.captured_at.where(stake).groupby(lineas.game_date).transform("max")
+    lineas = lineas[~stake | (lineas.captured_at == ultima)]
+    lineas = lineas.sort_values("captured_at").groupby(["game_date", "player_id", "market", "line"]).tail(1).copy()
+    # Stake trae líneas alternas: la principal de cada jugador y mercado es la más pareja sin margen.
+    lineas["pm_over"] = [odds.sin_margen(o, u) if o > 1 and u > 1 else np.nan
+                         for o, u in zip(lineas.over_odds, lineas.under_odds)]
+    pareja = (lineas.pm_over - 0.5).abs().fillna(np.inf).groupby(
+        [lineas.game_date, lineas.player_id, lineas.market, lineas.bookmaker]).idxmin()
+    lineas["principal"] = lineas.index.isin(pareja)
     df = pred.merge(lineas, on=["game_date", "player_id", "market"], how="left")
     con_linea = df.line.notna()
     po = np.where(con_linea, modelo.p_over(df.projected_mean, df.dispersion, df.line.fillna(0)), np.nan)
@@ -79,6 +90,12 @@ def calificar(con) -> pd.DataFrame:
     df["p_mercado"] = [odds.sin_margen(r.over_odds, r.under_odds) if r.over_odds > 1 and r.under_odds > 1
                        else np.nan for r in df.itertuples()]
     df["p_mercado"] = np.where(df.lado == "under", 1 - df.p_mercado, df.p_mercado)
+    # Lado favorito con la probabilidad que usan los parleys (mercado movido por el modelo), en todas las líneas
+    # de Stake: sirve para ver si un leg de 75 % cumple de verdad 75 %.
+    mezcla = np.array([props.mezclar(m, p, "dos_lados") if m == m and b == "Stake" else np.nan
+                       for m, p, b in zip(df.pm_over, po, df.bookmaker)])
+    df["p_fav"] = np.maximum(mezcla, 1 - mezcla)
+    df["ok_fav"] = np.where(np.isnan(mezcla) | (df.real == df.line), np.nan, np.where(mezcla >= 0.5, over, ~over))
     return df
 
 
@@ -94,8 +111,12 @@ def resumir(df: pd.DataFrame, factores: dict) -> dict:
                        "cobertura_10_90": round(float(g.real.between(g.lower_interval, g.upper_interval).mean()), 3)
                        if len(g) else None,
                        "factor": factores.get(s)}  # Las combinadas heredan la de sus partes.
-    legs = df.dropna(subset=["acierto"])
+    legs = df[df.principal.eq(True)].dropna(subset=["acierto"])  # Las alternas de Stake no cuentan aquí.
     con_mercado = legs.dropna(subset=["p_mercado"])
+    fav = df.dropna(subset=["ok_fav"])
+    calibracion = [{"de": a, "a": b, "n": int(len(g)), "aciertos": int(g.ok_fav.sum()),
+                    "esperados": round(float(g.p_fav.sum()), 1)}
+                   for a, b in zip(TRAMOS, TRAMOS[1:]) for g in [fav[(fav.p_fav >= a) & (fav.p_fav < b)]] if len(g)]
     lineas = {"n": int(len(legs)),
               "aciertos": int(legs.acierto.sum()),
               "brier_modelo": round(float(((legs.p_lado - legs.acierto) ** 2).mean()), 4) if len(legs) else None,
@@ -110,7 +131,7 @@ def resumir(df: pd.DataFrame, factores: dict) -> dict:
                           "partido": r.partido or ""}
                          for r in ultimos.itertuples()]
     dias = sorted(df.game_date.unique())
-    return {"por_stat": por_stat, "lineas": lineas, "dias": len(dias),
+    return {"por_stat": por_stat, "lineas": lineas, "calibracion": calibracion, "dias": len(dias),
                       "desde": dias[0] if dias else None, "hasta": dias[-1] if dias else None}
 
 

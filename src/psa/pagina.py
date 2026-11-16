@@ -47,7 +47,22 @@ def hora_panama(utc) -> str:
     return datetime.fromisoformat(str(utc).replace("Z", "+00:00")).astimezone(config.PANAMA).strftime("%H:%M")
 
 
-def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -> dict:
+def mas_seguras(lineas: list[dict]) -> dict:
+    """{(player_id, mercado): la línea y lado de Stake más probable, con su cuota}, entre todas las alternas."""
+    mejores = {}
+    for f in lineas:
+        if f["casa"] != "Stake" or f.get("player_id") is None or f.get("P mezcla over") is None:
+            continue
+        for lado in ("over", "under"):
+            p, cuota = f[f"P mezcla {lado}"], f.get(f"cuota {lado}")
+            clave = (int(f["player_id"]), f["mercado"])
+            if cuota and (clave not in mejores or p > mejores[clave]["p"]):
+                mejores[clave] = {"lado": lado, "linea": f["línea"], "p": round(p, 3), "cuota": cuota,
+                                  "ve": limpio(f.get(f"VE {lado}")), "real": True}
+    return mejores
+
+
+def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None, segura_stake: dict | None = None) -> dict:
     """Promedios, línea (real o de referencia), probabilidad, lado del modelo y aciertos L10 de un prop.
 
     `valores`: del partido más reciente al más viejo. Sin línea real, la referencia es la media L10 redondeada
@@ -86,7 +101,11 @@ def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -
         alto = lado
         salida["alto"] = {"lado": lado, "p": salida["p_lado"], "ve": None}
     segura = modelo.linea_segura(float(mu), float(k), alto)
-    if segura:
+    if segura_stake:  # Con alternas de Stake, la segura es una línea real con su cuota, no la del modelo.
+        s = segura_stake
+        salida["segura"] = {**s, "aciertos": int(sum((v > s["linea"]) if s["lado"] == "over" else (v < s["linea"])
+                                                     for v in valores[:10]))}
+    elif segura:
         salida["segura"] = {"lado": alto, "linea": segura[0], "p": segura[1],
                             "aciertos": int(sum((v > segura[0]) if alto == "over" else (v < segura[0]) for v in valores[:10]))}
     ultimos = valores[:10]  # Aciertos del lado más probable en sus últimos 10.
@@ -121,18 +140,24 @@ def datos(con, fecha: str) -> dict:
     estado = dict(zip(estados.clave, estados.status)) if not estados.empty else {}
 
     props = pd.read_sql("SELECT * FROM player_props WHERE game_date = ?", con, params=(fecha,))
+    # De Stake solo la última lectura: una línea que ya movió o quitó no debe entrar a un parley con cuota vieja.
+    stake = props.bookmaker == "Stake"
+    props = props[~stake | (props.captured_at == props.captured_at[stake].max())]
     tabla = props_nba.evaluar(pred, props) if not (pred.empty or props.empty) else pd.DataFrame()
     lineas = [{k: limpio(v) for k, v in fila.items()} for fila in tabla.to_dict("records")]
     partido_de = {int(r.player_id): nombres.get(r.game_id, "") for r in pred.itertuples()} if not pred.empty else {}
     for fila in lineas:
         fila["partido"] = partido_de.get(int(fila["player_id"]), "") if fila.get("player_id") is not None else ""
-    # Línea real por jugador y mercado: la de una casa (manual) manda sobre el consenso de referencia.
+    props_nba.marcar_principales(lineas)
+    # Línea real por jugador y mercado: la principal de una casa manda sobre el consenso de referencia. Las alternas
+    # de Stake solo entran a los parleys.
     reales = {}
     for fila in sorted(lineas, key=lambda f: not props_nba.es_consenso(f["casa"])):
-        if fila.get("P over") is not None and fila.get("player_id") is not None:
+        if fila["principal"] and fila.get("P over") is not None and fila.get("player_id") is not None:
             reales[(int(fila["player_id"]), fila["mercado"])] = fila
 
-    jugadores = []
+    jugadores, ultimos, seguras = [], {}, mas_seguras(lineas)
+    dorsales = dict(con.execute("SELECT player_id, jersey FROM nba_jerseys"))
     if not pred.empty:
         hist = proyeccion.historial(con)
         hist = hist[hist.game_date < fecha].sort_values("game_date", ascending=False)
@@ -142,7 +167,8 @@ def datos(con, fecha: str) -> dict:
         lineas_rw = alineaciones.del_dia(con, fecha)
         for r in pred.itertuples():
             clave = (r.player_id, r.scenario)
-            fila = ancho.setdefault(clave, {"j": r.jugador, "pid": int(r.player_id), "eq": r.equipo, "p": nombres.get(r.game_id, ""),
+            fila = ancho.setdefault(clave, {"j": r.jugador, "pid": int(r.player_id), "num": dorsales.get(int(r.player_id)),
+                                            "eq": r.equipo, "p": nombres.get(r.game_id, ""),
                                             "esc": r.scenario, "min": limpio(r.minutes, 1),
                                             "sd": limpio(r.minutes_sd, 1), "n": limpio(r.sample_games),
                                             "notas": r.notes or "", "m": {}, "props": {}})
@@ -151,10 +177,11 @@ def datos(con, fecha: str) -> dict:
             if r.scenario == "base":
                 g = previos.get(r.player_id, hist.iloc[:0])
                 stat = config.MERCADOS_NBA[r.market]
+                ultimos[(int(r.player_id), r.market)] = g[stat].dropna().tolist()[:10]
                 fila["props"][CORTOS[r.market]] = analizar_mercado(
                     g[stat].dropna().tolist(), g[g.season == temporada][stat].dropna().tolist(),
                     None if pd.isna(r.projected_mean) else r.projected_mean, r.dispersion,
-                    reales.get((int(r.player_id), r.market)))
+                    reales.get((int(r.player_id), r.market)), seguras.get((int(r.player_id), r.market)))
         for (pid, esc), fila in ancho.items():
             if esc != "base":
                 continue
@@ -172,7 +199,7 @@ def datos(con, fecha: str) -> dict:
          "motivo": r.reason or "", "manual": bool(r.manual)}
         for r in estados.sort_values(["team_id", "player_name"]).itertuples()]
 
-    parleys = combinadas.armar(jugadores)
+    parleys = combinadas.armar(jugadores, lineas, ultimos, proyeccion.correlacion_vigente(con))
     inicios = {r.partido: r.start_time_utc for r in juegos.itertuples()}
     combinadas.guardar(con, fecha, parleys, inicios)
     corrida = con.execute("SELECT metrics_json, created_at FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1",
@@ -190,7 +217,8 @@ def datos(con, fecha: str) -> dict:
                       "inicio": r.start_time_utc if isinstance(r.start_time_utc, str) else None,
                       "marcador": f"{int(r.away_score)}-{int(r.home_score)}" if pd.notna(r.away_score) else ""}
                      for r in juegos.itertuples()],
-        "jugadores": jugadores, "lesiones": lista_lesiones, "props": lineas, "con_precio": props_nba.hay_precio(tabla),
+        "jugadores": jugadores, "lesiones": lista_lesiones, "props": [f for f in lineas if f["principal"]],
+        "lineas_stake": sum(f["casa"] == "Stake" for f in lineas), "con_precio": props_nba.hay_precio(tabla),
         "backtest": backtest,
         "resultados": resultados.ultimas_metricas(con),
         "parleys": parleys,

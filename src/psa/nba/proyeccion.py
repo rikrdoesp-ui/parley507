@@ -40,6 +40,11 @@ def ajuste_ausencias_vigente(con) -> tuple[float, float]:
     return params.get("fraccion_minutos", 0.0), params.get("alfa_uso", 0.0)
 
 
+def correlacion_vigente(con) -> dict:
+    """Correlación entre jugadores del mismo partido del último backtest; sin ella, legs independientes."""
+    return _params(con).get("correlacion") or {}
+
+
 def capa_vigente(con) -> dict | None:
     """Coeficientes de la capa de regresión del último backtest; sin backtest, minutos x tasa a secas."""
     return _params(con).get("capa")

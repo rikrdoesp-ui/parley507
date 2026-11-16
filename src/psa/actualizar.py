@@ -41,6 +41,11 @@ def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publi
         paso(35, "Calendario...")
         resumen["partidos_calendario"] = fuente.cargar_calendario(con, actual)
         con.commit()
+        try:
+            resumen["dorsales"] = fuente.cargar_dorsales(con, actual)
+            con.commit()
+        except RuntimeError as error:  # Solo es un dato de la ficha: sin él la página sale igual.
+            resumen["avisos"].append(f"No se leyeron los dorsales ({error}).")
         if con_ot:
             paso(42, "Estadísticas sin prórroga de partidos con OT...")
             resumen["partidos_ot"] = fuente.cargar_regulacion(con)

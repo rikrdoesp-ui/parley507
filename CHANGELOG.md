@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.1.28 — 2026-11-16
+
+- Líneas alternas de Stake (la flecha junto a la línea): `/parley` las lee con `scripts/escaner_lineas.js` y la app
+  usa todas. La principal de cada jugador y mercado es la más pareja sin margen; las fichas, Props y el acierto de
+  Resultados siguen con la principal. De Stake solo cuenta la última lectura del día.
+- Parley con los dos escenarios: **1 prop por juego** (el más probable de cada partido entre todas sus líneas y la
+  escalera de 2 legs en adelante) y **2 props por juego** (el mejor par de cada partido y la escalera por número
+  de partidos). Reemplazan a los parleys de 2 y 3 legs de un solo partido.
+- Probabilidad conjunta del mismo juego con la correlación histórica entre jugadores (se ajusta en el backtest).
+  Resultó pequeña: 0,07 entre asistencias y puntos de compañeros y menos de 0,03 en el resto.
+- Ficha del jugador: la línea "Segura" de cada mercado y el destacado "Más segura" ya son líneas reales de Stake
+  con su cuota (la más probable entre sus alternas); sin alternas se sigue mostrando la del modelo, marcada como tal.
+  Junto al nombre sale el dorsal (PlayerIndex de la NBA, una vez al día).
+- Resultados: aciertos por escenario y la tabla "¿Cumplen lo que dicen?", que compara por tramo de probabilidad lo
+  que cumplió el lado favorito de cada línea de Stake con lo esperado.
+
 ## v0.1.27 — 2026-11-16
 
 - Capa de regresión sobre la media (modelo nba-min-tasa-nb-0.4): minutos × tasa se pasaba con los jugadores de

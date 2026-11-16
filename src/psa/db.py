@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS teams(
 CREATE TABLE IF NOT EXISTS players(
   player_id INTEGER PRIMARY KEY, full_name TEXT NOT NULL, name_key TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS ix_players_key ON players(name_key);
+-- Dorsal vigente. Tabla aparte: `players` se reescribe entera con cada game log.
+CREATE TABLE IF NOT EXISTS nba_jerseys(
+  player_id INTEGER PRIMARY KEY, jersey TEXT NOT NULL, captured_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS games(
   game_id TEXT PRIMARY KEY, season TEXT NOT NULL, season_type TEXT NOT NULL, game_date TEXT NOT NULL,
   start_time_utc TEXT, home_team_id INTEGER, away_team_id INTEGER, venue TEXT, neutral_site INTEGER,

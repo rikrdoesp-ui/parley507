@@ -87,6 +87,21 @@ def evaluar(pred: pd.DataFrame, props: pd.DataFrame, escenario: str = "base") ->
     return tabla
 
 
+def marcar_principales(lineas: list[dict]) -> list[dict]:
+    """Pone `principal` en cada fila: de las líneas de un jugador, mercado y casa (Stake trae alternas), la más
+    pareja según el mercado sin margen, que es la que la casa muestra por defecto."""
+    grupos = {}
+    for f in lineas:
+        grupos.setdefault((f.get("player_id") or f["jugador"], f["mercado"], f["casa"]), []).append(f)
+    for grupo in grupos.values():
+        # Sin precio de los dos lados no se sabe si es pareja: queda al final.
+        pareja = min(grupo, key=lambda f: abs(f["P mercado over (sin margen)"] - 0.5)
+                     if f.get("P mercado over (sin margen)") is not None else float("inf"))
+        for f in grupo:
+            f["principal"] = f is pareja
+    return lineas
+
+
 def hay_precio(tabla: pd.DataFrame) -> bool:
     return bool(tabla.get("VE over", pd.Series(dtype=float)).notna().any()
                 or tabla.get("VE under", pd.Series(dtype=float)).notna().any())

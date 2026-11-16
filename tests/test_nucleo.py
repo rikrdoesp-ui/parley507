@@ -286,26 +286,54 @@ def test_k_por_minutos():
 
 # --- Parleys por partido -------------------------------------------------------------
 
-def _jugador(nombre, eq, p, lado="over", aciertos=7, est="", notas="", minutos=30, casa="Stake"):
-    prop = {"tipo": "real", "casa": casa, "linea": 10.5, "media": 12.0, "l5": 12, "l10": 11.5,
-            "aciertos": [aciertos, 10], "alto": {"lado": lado, "p": p, "ve": -0.02, "cuota": 1.8, "pm": p - 0.02}}
-    return {"j": nombre, "eq": eq, "p": "AAA @ BBB", "esc": "base", "min": minutos, "est": est, "notas": notas,
-            "props": {"pts": prop}}
+def _dia():
+    """Dos partidos: en AAA @ BBB, A (con una línea alterna más fácil) y B; en CCC @ DDD solo C pasa las reglas."""
+    jugadores, lineas, ultimos = [], [], {}
+
+    def jugador(pid, nombre, partido, p, linea=10.5, est="", notas="", minutos=30, casa="Stake", aciertos=7):
+        if not any(j["pid"] == pid for j in jugadores):
+            jugadores.append({"j": nombre, "pid": pid, "eq": partido[:3], "p": partido, "esc": "base", "min": minutos,
+                              "est": est, "notas": notas})
+            ultimos[(pid, "puntos")] = [12] * aciertos + [9] * (10 - aciertos)  # Over 10.5: `aciertos`; over 8.5: 10.
+        lineas.append({"player_id": pid, "jugador": nombre, "mercado": "puntos", "línea": linea, "casa": casa,
+                       "P mezcla over": p, "P mezcla under": 1 - p, "cuota over": 1.8, "cuota under": 2.0,
+                       "VE over": -0.02, "VE under": -0.1, "P mercado over (sin margen)": p - 0.02, "media": 12.0,
+                       "principal": linea == 10.5})
+
+    jugador(1, "A", "AAA @ BBB", 0.70)
+    jugador(1, "A", "AAA @ BBB", 0.80, linea=8.5)  # Línea alterna: más probable, gana a la principal.
+    jugador(2, "B", "AAA @ BBB", 0.68)
+    jugador(3, "C", "CCC @ DDD", 0.60)
+    jugador(4, "Duda", "CCC @ DDD", 0.90, est="Questionable")
+    jugador(5, "Poco", "CCC @ DDD", 0.90, aciertos=5)
+    jugador(6, "Paliza", "CCC @ DDD", 0.90, notas="riesgo de paliza")
+    jugador(7, "Consenso", "CCC @ DDD", 0.90, casa="Consenso BettingPros")
+    jugador(8, "Banca", "CCC @ DDD", 0.90, minutos=12)
+    jugador(9, "Bajo", "CCC @ DDD", 0.50)
+    return jugadores, lineas, ultimos
 
 
-def test_parley_filtra_y_elige_los_mas_probables():
+def test_parley_uno_por_juego_y_dos_por_juego():
     from psa.nba import combinadas
-    jugadores = [_jugador("A", "AAA", 0.70), _jugador("B", "AAA", 0.68), _jugador("C", "AAA", 0.66),  # 3.º del mismo equipo
-                 _jugador("D", "BBB", 0.60), _jugador("Duda", "BBB", 0.90, est="Questionable"),
-                 _jugador("Poco", "BBB", 0.90, aciertos=5), _jugador("Paliza", "BBB", 0.90, notas="riesgo de paliza"),
-                 _jugador("Consenso", "BBB", 0.90, casa="Consenso BettingPros"), _jugador("Banca", "BBB", 0.90, minutos=12),
-                 _jugador("Bajo", "BBB", 0.50)]
-    parleys = combinadas.armar(jugadores)
-    assert [len(p["legs"]) for p in parleys] == [2, 3]
-    assert [l["j"] for l in parleys[1]["legs"]] == ["A", "B", "D"]  # Máximo 2 por equipo: C queda fuera.
-    assert parleys[0]["prob"] == pytest.approx(0.70 * 0.68, abs=1e-3)
-    assert parleys[0]["cuota_justa"] == pytest.approx(1 / (0.70 * 0.68), abs=0.01)
-    assert "7 de sus últimos 10" in parleys[0]["legs"][0]["por_que"]
+    p = combinadas.armar(*_dia(), {})
+    uno, dos = p["uno"], p["dos"]
+    assert [(l["j"], l["linea"]) for l in uno["legs"]] == [("A", 8.5), ("C", 10.5)]  # El mejor de cada partido.
+    assert not uno["legs"][0]["principal"] and uno["legs"][0]["aciertos"] == [10, 10]
+    assert uno["escalera"] == [{"n": 2, "prob": 0.48, "cuota": 3.24, "justa": 2.08, "ve": pytest.approx(0.555, abs=1e-3)}]
+    assert [g["partido"] for g in dos["grupos"]] == ["AAA @ BBB"]  # CCC @ DDD no junta 2 legs.
+    assert [l["j"] for l in dos["grupos"][0]["legs"]] == ["A", "B"] and dos["grupos"][0]["prob"] == pytest.approx(0.544)
+    assert dos["escalera"][0]["partidos"] == 1
+
+
+def test_correlacion_mueve_la_probabilidad_conjunta():
+    juntos = modelo.p_conjunta([0.6, 0.6], np.array([[1, 0.3], [0.3, 1]]))
+    assert modelo.p_conjunta([0.6, 0.6], np.eye(2)) == pytest.approx(0.36, abs=1e-4) and juntos > 0.37
+    assert modelo.p_conjunta([0.6, 0.6], np.array([[1, -0.3], [-0.3, 1]])) < 0.36
+    # Dos compañeros que siempre se desvían igual: correlación 1 entre compañeros.
+    filas = pd.DataFrame([{"game_id": g, "team_id": 1, "min_proy": 30.0, **{s: 10.0 + (g % 3) for s in modelo.TODAS},
+                           **{f"mu_{s}": 11.0 for s in modelo.TODAS}} for g in range(30) for _ in range(2)])
+    c = modelo.correlaciones(filas, modelo.K_DEFECTO)
+    assert c["mismo"]["points|points"] == pytest.approx(1, abs=0.05) and c["rival"]["points|points"] == 0.0
 
 
 def test_combinadas_suman_sus_partes_y_lo_real():
@@ -322,23 +350,23 @@ def test_combinadas_suman_sus_partes_y_lo_real():
 def test_parleys_se_guardan_antes_del_inicio_y_se_califican(tmp_path):
     from psa.nba import combinadas
     con = db.conectar(tmp_path / "t.sqlite")
-    con.execute("INSERT INTO players VALUES (1, 'Ana Pérez', 'ana perez'), (2, 'Bea Ruiz', 'bea ruiz')")
-    leg = lambda j, mercado, lado, linea: {"j": j, "mercado": mercado, "lado": lado, "linea": linea, "prob": 0.6, "cuota": 1.8}
-    parley = lambda partido: {"partido": partido, "legs": [leg("Ana Pérez", "PRA", "over", 30.5), leg("Bea Ruiz", "rebotes", "under", 6.5)],
-                              "prob": 0.36, "cuota": 3.24, "cuota_justa": 2.78, "ve": 0.17}
-    inicios = {"A @ B": "2099-01-01T00:00:00Z", "C @ D": "2000-01-01T00:00:00Z"}  # Uno futuro, uno ya empezado.
-    assert combinadas.guardar(con, "2026-11-14", [parley("A @ B"), parley("C @ D")], inicios) == 1
+    con.execute("INSERT INTO players VALUES (1, 'A', 'a'), (2, 'B', 'b')")
+    parleys = combinadas.armar(*_dia(), {})
+    inicios = {"AAA @ BBB": "2099-01-01T00:00:00Z", "CCC @ DDD": "2000-01-01T00:00:00Z"}  # Uno futuro, uno ya empezado.
+    # "Dos por juego" solo usa AAA @ BBB; "uno por juego" incluye un partido ya empezado y no se guarda.
+    assert combinadas.guardar(con, "2026-11-14", parleys, inicios) == 1
     assert combinadas.calificar(con)["parleys"][0]["estado"] == "pendiente"  # Sin box score todavía.
     con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, rebounds,"
                 " assists, source_id) VALUES ('g', 1, 9, '2026-27', '2026-11-14', 30, 20, 8, 5, 0),"
-                " ('g', 2, 9, '2026-27', '2026-11-14', 25, 10, 4, 2, 0)")
+                " ('g', 2, 9, '2026-27', '2026-11-14', 25, 12, 4, 2, 0)")
     con.execute("INSERT INTO games(game_id, season, season_type, game_date, status) VALUES ('g', '2026-27', 'Regular', "
                 "'2026-11-14', 'en vivo')")
     assert combinadas.calificar(con)["parleys"][0]["estado"] == "pendiente"  # Parcial: no se califica.
     con.execute("UPDATE games SET status = 'final'")
     r = combinadas.calificar(con)
-    assert r["parleys"][0]["legs"][0]["real"] == 33 and r["parleys"][0]["estado"] == "gano"
-    assert (r["decididos"], r["ganados"], r["esperados"]) == (1, 1, 0.36)
+    assert r["parleys"][0]["legs"][0]["real"] == 20 and r["parleys"][0]["estado"] == "gano"
+    assert (r["decididos"], r["ganados"], r["esperados"]) == (1, 1, 0.54)
+    assert r["por_tipo"]["dos por juego"]["ganados"] == 1 and r["por_tipo"]["uno por juego"]["decididos"] == 0
 
 
 def test_linea_segura():

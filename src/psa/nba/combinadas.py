@@ -1,15 +1,23 @@
-"""Parleys por partido con las props de Stake que tienen precio, cada leg con su justificación.
+"""Parleys con las props de Stake que tienen precio, incluidas las líneas alternas (la flecha junto a la línea).
 
-Solo es una propuesta: BET o PASS, monto y topes los decide /parley. Reglas de selección:
-- lado más probable de la línea de Stake (probabilidad del mercado sin margen, movida por el modelo);
+Solo es una propuesta: BET o PASS, monto y topes los decide /parley. Dos escenarios, como juega Ricardo:
+1. Uno por juego: el mejor prop de cada partido; el parley mezcla partidos. Escalera de 2 legs en adelante.
+2. Dos por juego: cada partido aporta su mejor par de props; el parley es un partido o varios, siempre 2 por partido.
+
+"Mejor" es el más probable, porque el objetivo es acertar. Reglas de un leg:
+- probabilidad del mercado sin margen, movida por el modelo (props.mezclar), de P_MINIMA o más;
 - jugador sin duda ni baja, con muestra suficiente, 20+ minutos proyectados y minutos estables;
-- el lado salió en al menos 6 de sus últimos 10 partidos;
+- el lado salió en al menos 6 de sus últimos 10 partidos a esa misma línea;
 - nada de overs de titulares con riesgo de paliza (pueden jugar menos minutos);
-- un leg por jugador y como mucho 2 por equipo, para no amontonar legs que se mueven juntos.
-La probabilidad conjunta supone legs independientes: en el mismo partido no lo son del todo, y Stake paga menos que
-el producto de las cuotas en los "mismo juego". Por eso se da la cuota justa: el mínimo que Stake debería pagar.
+- un leg por jugador.
+Partidos distintos son independientes. Dentro de un partido la probabilidad conjunta usa la correlación histórica
+entre jugadores (modelo.correlaciones); es pequeña (0,07 como mucho). En "mismo juego" Stake paga menos que el
+producto de las cuotas: la cuota mostrada es el tope y la justa es el mínimo que debería pagar.
 """
 import json
+from itertools import combinations
+
+import numpy as np
 
 from .. import config, db
 from . import lesiones, modelo
@@ -17,88 +25,152 @@ from . import lesiones, modelo
 P_MINIMA = 0.55
 ACIERTOS_MINIMOS = 6
 MINUTOS_MINIMOS = 20
-MAX_POR_EQUIPO = 2
-TAMANOS = (2, 3)
-NOMBRES = {"pts": "puntos", "reb": "rebotes", "ast": "asistencias", "pra": "PRA", "pr": "PR", "ra": "RA"}
+POR_JUEGO = 2  # Legs por partido en el escenario 2.
+CANDIDATOS_POR_JUEGO = 12  # Los más probables de cada partido entre los que se busca el mejor par.
+NOMBRES = {"puntos": "puntos", "rebotes": "rebotes", "asistencias": "asistencias", "pra": "PRA", "pr": "PR", "ra": "RA"}
+UNO, DOS = "uno por juego", "dos por juego"
 
 
-def candidatos(jugadores: list[dict]) -> list[dict]:
-    salida = []
+def candidatos(jugadores: list[dict], lineas: list[dict], ultimos: dict) -> list[dict]:
+    """Un candidato por línea de Stake y lado que pasa las reglas.
+
+    `lineas`: filas de props.evaluar (todas las líneas, alternas incluidas). `ultimos`: {(player_id, mercado):
+    valores de los últimos 10 partidos}.
+    """
+    aptos = {}
     for j in jugadores:
-        if j.get("esc") != "base" or j.get("est") in lesiones.NO_JUEGA | lesiones.DUDA:
-            continue
         notas = j.get("notas", "")
-        if "muestra insuficiente" in notas or "minutos inestables" in notas or (j.get("min") or 0) < MINUTOS_MINIMOS:
+        if (j.get("esc") == "base" and j.get("est") not in lesiones.NO_JUEGA | lesiones.DUDA
+                and "muestra insuficiente" not in notas and "minutos inestables" not in notas
+                and (j.get("min") or 0) >= MINUTOS_MINIMOS):
+            aptos[j["pid"]] = j
+    salida = []
+    for l in lineas:
+        j = aptos.get(l.get("player_id"))
+        if j is None or l.get("casa") != "Stake" or l.get("P mezcla over") is None:
             continue
-        for corto, p in j.get("props", {}).items():
-            alto = p.get("alto") or {}
-            if p.get("tipo") != "real" or str(p.get("casa", "")).startswith("Consenso") or not alto.get("cuota"):
+        valores = ultimos.get((j["pid"], l["mercado"]), [])
+        for lado in ("over", "under"):
+            prob, cuota = l.get(f"P mezcla {lado}"), l.get(f"cuota {lado}")
+            if not cuota or prob is None or prob < P_MINIMA:
                 continue
-            aciertos, n = p.get("aciertos") or (0, 0)
-            if alto["p"] < P_MINIMA or aciertos < ACIERTOS_MINIMOS:
+            if lado == "over" and "riesgo de paliza" in j.get("notas", ""):
                 continue
-            if alto["lado"] == "over" and "riesgo de paliza" in notas:
+            aciertos = sum((v > l["línea"]) if lado == "over" else (v < l["línea"]) for v in valores)
+            if aciertos < ACIERTOS_MINIMOS:
                 continue
-            salida.append({"p": j["p"], "j": j["j"], "eq": j["eq"], "mercado": NOMBRES[corto], "lado": alto["lado"],
-                           "linea": p["linea"], "prob": alto["p"], "pm": alto.get("pm"), "cuota": alto["cuota"],
-                           "ve": alto.get("ve"), "media": p.get("media"), "l5": p.get("l5"), "l10": p.get("l10"),
-                           "aciertos": [aciertos, n], "min": j.get("min"),
-                           "por_que": justificar(p, alto, aciertos, n, j.get("min"))})
+            pm = l.get("P mercado over (sin margen)")
+            salida.append({"p": j["p"], "j": j["j"], "pid": j["pid"], "eq": j["eq"], "clave": l["mercado"],
+                           "mercado": NOMBRES[l["mercado"]], "lado": lado, "linea": l["línea"],
+                           "prob": round(prob, 3), "cuota": cuota, "ve": l.get(f"VE {lado}"),
+                           "pm": None if pm is None else round(pm if lado == "over" else 1 - pm, 3),
+                           "principal": bool(l.get("principal")), "media": l.get("media"), "min": j.get("min"),
+                           "aciertos": [aciertos, len(valores)]})
     return salida
 
 
-def justificar(p: dict, alto: dict, aciertos: int, n: int, minutos) -> str:
-    lado = "más" if alto["lado"] == "over" else "menos"
-    partes = [f"El modelo proyecta {p['media']} contra la línea {p['linea']} ({lado} de {p['linea']})",
-              f"cumplió en {aciertos} de sus últimos {n}", f"promedia {p['l5']} en los últimos 5 y {p['l10']} en 10",
-              f"{minutos} minutos proyectados"]
-    if alto.get("pm") is not None:
-        partes.append(f"el mercado sin margen le da {alto['pm']:.0%} y con el modelo queda en {alto['p']:.0%}")
-    return "; ".join(partes) + "."
+def _orden(c: dict):
+    return (-c["prob"], -(c["ve"] if c["ve"] is not None else -1))
 
 
-def armar(jugadores: list[dict]) -> list[dict]:
-    """Por partido, el parley de 2 y de 3 legs más probable que cumple las reglas."""
+def _escalon(legs: list[dict], prob: float) -> dict:
+    cuota = float(np.prod([c["cuota"] for c in legs]))
+    return {"n": len(legs), "prob": round(prob, 3), "cuota": round(cuota, 2), "justa": round(1 / prob, 2),
+            "ve": round(prob * cuota - 1, 3)}
+
+
+def uno_por_juego(cands: list[dict]) -> dict:
+    """El leg más probable de cada partido, del más al menos probable, y la escalera de 2 legs en adelante."""
+    mejores = {}
+    for c in sorted(cands, key=_orden):
+        mejores.setdefault(c["p"], c)
+    legs = sorted(mejores.values(), key=_orden)
+    escalera, prob = [], 1.0
+    for n, c in enumerate(legs, 1):
+        prob *= c["prob"]
+        if n >= 2:
+            escalera.append(_escalon(legs[:n], prob))
+    return {"legs": legs, "escalera": escalera}
+
+
+def _rho(a: dict, b: dict, corr: dict) -> float:
+    tabla = corr.get("mismo" if a["eq"] == b["eq"] else "rival", {})
+    r = tabla.get(f"{config.MERCADOS_NBA[a['clave']]}|{config.MERCADOS_NBA[b['clave']]}", 0.0)
+    return r * (1 if a["lado"] == b["lado"] else -1)  # Un under invierte el signo.
+
+
+def conjunta(legs: list[dict], corr: dict) -> float:
+    rho = np.eye(len(legs))
+    for (i, a), (k, b) in combinations(enumerate(legs), 2):
+        rho[i, k] = rho[k, i] = _rho(a, b, corr)
+    return modelo.p_conjunta([c["prob"] for c in legs], rho)
+
+
+def dos_por_juego(cands: list[dict], corr: dict) -> dict:
+    """Por partido, el grupo de POR_JUEGO legs (jugadores distintos) con mayor probabilidad conjunta, y la escalera
+    por número de partidos."""
     por_partido = {}
-    for c in candidatos(jugadores):
-        por_partido.setdefault(c["p"], []).append(c)
-    parleys = []
-    for partido, legs in por_partido.items():
-        elegidos, usados, por_equipo = [], set(), {}
-        for c in sorted(legs, key=lambda c: (-c["prob"], -(c["ve"] or -1))):
-            if c["j"] in usados or por_equipo.get(c["eq"], 0) >= MAX_POR_EQUIPO:
-                continue
-            elegidos.append(c)
-            usados.add(c["j"])
-            por_equipo[c["eq"]] = por_equipo.get(c["eq"], 0) + 1
-            if len(elegidos) == max(TAMANOS):
-                break
-        for tam in TAMANOS:
-            if len(elegidos) < tam:
-                continue
-            sel = elegidos[:tam]
-            prob, cuota = 1.0, 1.0
-            for c in sel:
-                prob *= c["prob"]
-                cuota *= c["cuota"]
-            parleys.append({"partido": partido, "legs": sel, "prob": round(prob, 3), "cuota": round(cuota, 2),
-                            "cuota_justa": round(1 / prob, 2), "ve": round(prob * cuota - 1, 3)})
-    return parleys
+    for c in sorted(cands, key=_orden):
+        lista = por_partido.setdefault(c["p"], [])
+        # Un leg por jugador: de cada uno solo su mejor línea entra a la búsqueda.
+        if len(lista) < CANDIDATOS_POR_JUEGO and all(x["pid"] != c["pid"] for x in lista):
+            lista.append(c)
+    grupos = []
+    for partido, lista in por_partido.items():
+        if len(lista) < POR_JUEGO:
+            continue
+        # Una sola evaluación por par: la integral de SciPy es numérica y dos llamadas no dan idéntico resultado.
+        prob, mejor = max(((conjunta(list(g), corr), g) for g in combinations(lista, POR_JUEGO)), key=lambda x: x[0])
+        grupos.append({"partido": partido, "legs": list(mejor), **_escalon(list(mejor), prob),
+                       "independiente": round(float(np.prod([c["prob"] for c in mejor])), 3)})
+    grupos.sort(key=lambda g: -g["prob"])
+    escalera, prob, legs = [], 1.0, []
+    for n, g in enumerate(grupos, 1):
+        prob *= g["prob"]
+        legs += g["legs"]
+        escalera.append({"partidos": n, **_escalon(legs, prob)})
+    return {"grupos": grupos, "escalera": escalera}
 
 
-def guardar(con, fecha: str, parleys: list[dict], inicios: dict) -> int:
-    """Guarda los parleys de partidos que aún no empiezan (reemplaza la versión anterior del mismo partido y tamaño).
+def armar(jugadores: list[dict], lineas: list[dict], ultimos: dict, corr: dict) -> dict:
+    cands = candidatos(jugadores, lineas, ultimos)
+    return {"uno": uno_por_juego(cands), "dos": dos_por_juego(cands, corr), "candidatos": len(cands)}
 
-    Lo que se propone ya empezado el partido no se guarda: calificarlo sería hacer trampa.
+
+def propuestas(parleys: dict) -> list[dict]:
+    """Cada escalón de las dos escaleras como un parley para guardar: tipo, legs y números."""
+    salida = []
+    uno, dos = parleys["uno"], parleys["dos"]
+    for e in uno["escalera"]:
+        salida.append({"tipo": UNO, "legs": uno["legs"][:e["n"]], **e})
+    legs = []
+    for g, e in zip(dos["grupos"], dos["escalera"]):
+        legs = legs + g["legs"]
+        salida.append({"tipo": DOS, "legs": legs, **e})
+    return salida
+
+
+def guardar(con, fecha: str, parleys: dict, inicios: dict) -> int:
+    """Guarda cada escalón mientras ninguno de sus partidos haya empezado (reemplaza la versión anterior).
+
+    Lo que se propone ya empezado un partido no se guarda: calificarlo sería hacer trampa.
     """
     ahora = db.ahora_utc()
-    nuevos = [p for p in parleys if inicios.get(p["partido"]) and _utc(inicios[p["partido"]]) > ahora]
+    # Un partido sin hora (NaT) no cuenta como "por empezar".
+    sin_empezar = lambda legs: all(isinstance(inicios.get(l.get("p")), str) and _utc(inicios[l["p"]]) > ahora for l in legs)
+    nuevos = [p for p in propuestas(parleys) if sin_empezar(p["legs"])]
+    # Los escalones del día que aún no empiezan se rehacen enteros: si ahora hay menos partidos elegibles, el
+    # escalón más largo de antes no debe quedar guardado con legs que ya no se proponen.
+    for tipo, tam, legs_json in con.execute("SELECT matchup, size, legs_json FROM parley_proposals WHERE game_date = ?"
+                                            " AND matchup IN (?, ?)", (fecha, UNO, DOS)).fetchall():
+        if sin_empezar(json.loads(legs_json)):
+            con.execute("DELETE FROM parley_proposals WHERE game_date = ? AND matchup = ? AND size = ?", (fecha, tipo, tam))
     con.executemany("""INSERT OR REPLACE INTO parley_proposals(game_date, matchup, size, legs_json, prob, odds, fair_odds,
                        ev, generated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                    [(fecha, p["partido"], len(p["legs"]),
-                      json.dumps([{k: l[k] for k in ("j", "mercado", "lado", "linea", "prob", "cuota")} for l in p["legs"]],
-                                 ensure_ascii=False), p["prob"], p["cuota"], p["cuota_justa"], p["ve"], ahora)
-                     for p in nuevos])
+                    [(fecha, p["tipo"], len(p["legs"]),
+                      json.dumps([{k: l[k] for k in ("j", "p", "mercado", "lado", "linea", "prob", "cuota")}
+                                  for l in p["legs"]], ensure_ascii=False),
+                      p["prob"], p["cuota"], p["justa"], p["ve"], ahora) for p in nuevos])
     con.commit()
     return len(nuevos)
 
@@ -129,16 +201,22 @@ def calificar(con) -> dict:
                 l["real"] > l["linea"] if l["lado"] == "over" else l["real"] < l["linea"])
         estado = ("perdio" if any(l["ok"] is False for l in legs) else
                   "gano" if all(l["ok"] is True for l in legs) else "pendiente")
-        inicio = inicios.get((fecha, partido))
-        tarde = bool(inicio) and generado >= _utc(inicio)  # Propuesto con el partido empezado: no cuenta.
-        salida.append({"f": fecha, "partido": partido, "tam": tam, "legs": legs, "prob": prob, "cuota": cuota,
-                       "justa": justa, "ve": ve, "estado": estado, "tarde": tarde})
+        # Los de antes de los dos escenarios eran de un solo partido y lo llevan en `matchup`.
+        tipo = partido if partido in (UNO, DOS) else "un partido"
+        empiezan = [inicios.get((fecha, l.get("p", partido))) for l in legs]
+        # Propuesto con algún partido empezado: no cuenta.
+        tarde = any(i and generado >= _utc(i) for i in empiezan)
+        salida.append({"f": fecha, "partido": partido, "tipo": tipo, "tam": tam, "legs": legs, "prob": prob,
+                       "cuota": cuota, "justa": justa, "ve": ve, "estado": estado, "tarde": tarde})
     decididos = [p for p in salida if p["estado"] != "pendiente" and not p["tarde"]]
     tarde = [p for p in salida if p["estado"] != "pendiente" and p["tarde"]]
-    return {"parleys": salida, "decididos": len(decididos), "ganados": sum(p["estado"] == "gano" for p in decididos),
-            "esperados": round(sum(p["prob"] for p in decididos), 2),
-            "tarde": {"decididos": len(tarde), "ganados": sum(p["estado"] == "gano" for p in tarde),
-                      "esperados": round(sum(p["prob"] for p in tarde), 2)}}
+
+    def cuenta(lista: list[dict]) -> dict:
+        return {"decididos": len(lista), "ganados": sum(p["estado"] == "gano" for p in lista),
+                "esperados": round(sum(p["prob"] for p in lista), 2)}
+
+    return {"parleys": salida, **cuenta(decididos), "tarde": cuenta(tarde),
+            "por_tipo": {t: cuenta([p for p in decididos if p["tipo"] == t]) for t in (UNO, DOS, "un partido")}}
 
 
 def _partes(stat: str) -> list[str]:

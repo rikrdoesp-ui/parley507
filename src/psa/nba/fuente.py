@@ -34,6 +34,19 @@ def cargar_equipos(con) -> None:
                     [(e["id"], e["abbreviation"], e["full_name"]) for e in equipos_estaticos.get_teams()])
 
 
+def cargar_dorsales(con, temporada: str) -> int:
+    """Dorsal de cada jugador (PlayerIndex, una llamada). Se pide una vez al día: cambia muy poco."""
+    hoy = db.ahora_utc()[:10]
+    if con.execute("SELECT 1 FROM nba_jerseys WHERE captured_at >= ? LIMIT 1", (hoy,)).fetchone():
+        return 0
+    from nba_api.stats.endpoints import playerindex
+    indice = llamar(playerindex.PlayerIndex, season=temporada)[0]
+    filas = [(int(r.PERSON_ID), str(r.JERSEY_NUMBER).strip(), db.ahora_utc()) for r in indice.itertuples()
+             if r.JERSEY_NUMBER is not None and str(r.JERSEY_NUMBER).strip() not in ("", "nan", "None")]
+    con.executemany("INSERT OR REPLACE INTO nba_jerseys VALUES (?, ?, ?)", filas)
+    return len(filas)
+
+
 def minutos(texto) -> float | None:
     """'31:47' -> 31.78; vacío -> None."""
     if texto is None or (isinstance(texto, float) and pd.isna(texto)) or str(texto).strip() == "":

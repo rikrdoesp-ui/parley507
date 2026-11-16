@@ -249,6 +249,50 @@ def ajustar_ausencias(presentes: dict, ausentes: dict, alfa: float, fraccion: fl
     return minutos, medias
 
 
+MINUTOS_CORRELACION = 20  # Solo jugadores de rotación, que son los que entran a un parley.
+
+
+def correlaciones(df: pd.DataFrame, k: dict) -> dict:
+    """Correlación entre lo que dos jugadores distintos del mismo partido se desvían de su proyección.
+
+    {"mismo": {"points|assists": r, ...}, "rival": {...}}: compañeros de equipo y rivales. Sirve para la probabilidad
+    conjunta de legs del mismo juego. La suma sobre pares sale de las sumas por equipo: sum_{i!=j} zi*zj =
+    (sum z_a)(sum z_b) - sum(z_a*z_b), sin recorrer pares.
+    """
+    d = df[(df.min_proy >= MINUTOS_CORRELACION)].dropna(subset=[f"mu_{s}" for s in TODAS] + TODAS)
+    z = pd.DataFrame({"game_id": d.game_id.to_numpy(), "team_id": d.team_id.to_numpy(), "n": 1.0})
+    for s in TODAS:
+        mu, kk = d[f"mu_{s}"].to_numpy(), k_para(k[s], d.min_proy.to_numpy())
+        r = (d[s].to_numpy() - mu) / np.sqrt(mu + mu ** 2 / kk)
+        z[s] = (r - r.mean()) / r.std()
+    for a in TODAS:
+        for b in TODAS:
+            z[f"{a}|{b}"] = z[a] * z[b]
+    eq = z.groupby(["game_id", "team_id"], as_index=False).sum()
+    par = eq.merge(eq, on="game_id", suffixes=("", "_r"))
+    par = par[par.team_id != par.team_id_r]
+    salida = {"mismo": {}, "rival": {}}
+    for a in TODAS:
+        for b in TODAS:
+            pares = (eq.n * (eq.n - 1)).sum()
+            salida["mismo"][f"{a}|{b}"] = round(float(((eq[a] * eq[b] - eq[f"{a}|{b}"]).sum()) / pares), 4) if pares else 0.0
+            cruces = (par.n * par.n_r).sum()
+            salida["rival"][f"{a}|{b}"] = round(float((par[a] * par[f"{b}_r"]).sum() / cruces), 4) if cruces else 0.0
+    return salida
+
+
+def p_conjunta(probs: list[float], rho: np.ndarray) -> float:
+    """P(todos los legs) con cópula gaussiana: cada leg se cumple si su normal latente queda bajo su umbral.
+
+    `rho`: matriz de correlación entre los legs (ya con el signo de over/under). Con rho = identidad es el producto.
+    """
+    from scipy.stats import multivariate_normal, norm
+    if len(probs) == 1:
+        return float(probs[0])
+    umbral = norm.ppf(np.clip(probs, 1e-6, 1 - 1e-6))
+    return float(multivariate_normal(mean=np.zeros(len(probs)), cov=rho, allow_singular=True).cdf(umbral))
+
+
 VIDA_FUERZA = 15  # Partidos de vida media para la fuerza de un equipo (margen de puntos reciente).
 VENTAJA_LOCAL = 2.5
 

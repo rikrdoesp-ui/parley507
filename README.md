@@ -87,6 +87,13 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
    (una sola cuota), como en /parley. El peso se recalibrará con 100 legs comparables. La del modelo se sigue mostrando.
 6. Menos de 5 partidos previos = "muestra insuficiente", sin proyección.
 
+Parleys del día (pestaña Parley): con todas las líneas de Stake, alternas incluidas (las lee `/parley` con
+`scripts/escaner_lineas.js` y quedan en `CODE/stake/lineas/FECHA.txt`), la página arma dos escenarios. **1 prop por
+juego:** el leg más probable de cada partido y la escalera de 2 legs en adelante. **2 props por juego:** el mejor
+par de cada partido y la escalera por número de partidos. Un leg entra con 55 % o más, jugador confirmado, 20+
+minutos estables y 6 de 10 a esa línea. Cada escalón se guarda antes de que empiece su primer partido y se califica
+solo; Resultados muestra el acierto por escenario y si cada tramo de probabilidad cumple lo que dice.
+
 Spread y palizas: cada partido muestra un spread estimado propio y los titulares de partidos con spread de 12 o más
 llevan un aviso de riesgo de paliza. No se les quitan minutos: se probó en el backtest y no mejoraba.
 
