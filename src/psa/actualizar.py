@@ -6,34 +6,46 @@ El botón "Actualizar datos" de la app ejecuta esta misma función.
 """
 import argparse
 import sys
-from datetime import date
+from datetime import date, timedelta
 
 import requests
 
 from . import config, db, pagina, parley_io
-from .nba import backtest, fuente, lesiones, proyeccion
+from .nba import backtest, fuente, lesiones, proyeccion, resultados
+
+DIAS_REAJUSTE = 7  # El backtest (dispersión, ajuste por bajas, legs reales) se rehace con esta frecuencia.
 
 
-def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publicar: bool = True) -> dict:
+def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publicar: bool = True,
+               progreso=None) -> dict:
+    """`progreso(porcentaje, texto)` recibe el avance (0 a 100) para la barra de la app."""
     fecha = fecha or config.hoy_panama().isoformat()
+
+    def paso(pct: int, texto: str) -> None:
+        aviso(texto)
+        if progreso:
+            progreso(pct, texto)
+
     actual = config.temporada_actual(date.fromisoformat(fecha))
     resumen = {"fecha": fecha, "avisos": []}
     with db.conectar() as con:
         fuente.cargar_equipos(con)
-        for t in config.temporadas(date.fromisoformat(fecha)):
-            ya = con.execute("SELECT 1 FROM nba_player_game_stats WHERE season = ? LIMIT 1", (t,)).fetchone()
-            if t == actual or not ya:  # Las temporadas cerradas se descargan una sola vez.
-                aviso(f"Box scores {t}...")
-                resumen[f"filas_{t}"] = fuente.cargar_logs(con, t)
-                con.commit()
-        aviso("Calendario...")
+        paso(2, "Equipos...")
+        # Las temporadas cerradas se descargan una sola vez.
+        bajar = [t for t in config.temporadas(date.fromisoformat(fecha)) if t == actual or not con.execute(
+            "SELECT 1 FROM nba_player_game_stats WHERE season = ? LIMIT 1", (t,)).fetchone()]
+        for i, t in enumerate(bajar):
+            paso(5 + 30 * i // len(bajar), f"Box scores {t}...")
+            resumen[f"filas_{t}"] = fuente.cargar_logs(con, t)
+            con.commit()
+        paso(35, "Calendario...")
         resumen["partidos_calendario"] = fuente.cargar_calendario(con, actual)
         con.commit()
         if con_ot:
-            aviso("Estadísticas sin prórroga de partidos con OT...")
+            paso(42, "Estadísticas sin prórroga de partidos con OT...")
             resumen["partidos_ot"] = fuente.cargar_regulacion(con)
 
-        aviso("Reporte de lesiones...")
+        paso(55, "Reporte de lesiones...")
         try:
             url, hora = lesiones.ultimo_pdf(actual)
             respuesta = requests.get(url, headers={"User-Agent": "Mozilla/5.0"}, timeout=30)
@@ -47,14 +59,21 @@ def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publi
             resumen["avisos"].append(f"No se leyó el reporte de lesiones ({error}). Ingresa los estados a mano.")
         con.commit()
 
-        if not con.execute("SELECT 1 FROM model_runs WHERE model_version = ?", (config.MODELO_NBA,)).fetchone():
-            aviso("Primer ajuste del modelo (backtest)...")
+        paso(65, "Calificando proyecciones con los resultados...")
+        r = resultados.actualizar(con)
+        if r:
+            resumen["resultados"] = {s: v["factor"] for s, v in r["por_stat"].items()}
+        ultimo = con.execute("SELECT MAX(created_at) FROM model_runs WHERE model_version = ?",
+                             (config.MODELO_NBA,)).fetchone()[0]
+        if not ultimo or ultimo[:10] <= (date.fromisoformat(fecha) - timedelta(days=DIAS_REAJUSTE)).isoformat():
+            paso(70, "Reajuste semanal del modelo (backtest)...")
             backtest.correr(con)
 
-        aviso("Proyecciones del día...")
+        paso(85, "Proyecciones del día...")
         recalcular(con, fecha, resumen)
-        aviso("Página para el celular...")
+        paso(95, "Página para el celular...")
         publicar_pagina(con, fecha, resumen, publicar)
+        paso(100, "Listo")
     return resumen
 
 

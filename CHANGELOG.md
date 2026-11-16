@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.13 — 2026-11-15
+
+- Resultados: cada actualización califica las proyecciones de los días ya jugados contra el box score (la última
+  hecha antes del partido) y contra las líneas guardadas (acierto del lado más probable, Brier del modelo y del
+  mercado). Se ve en la pestaña Modelo de la página y en Hoy de la app.
+- Aprendizaje: por estadística se calcula cuánto se queda corto o se pasa el modelo y las proyecciones nuevas se
+  corrigen con ese factor, encogido hacia 1 con poca muestra (mitad del efecto a las 1500 proyecciones) y con tope
+  de ±10 %. Se descuenta el factor que ya estaba aplicado, para no corregir dos veces.
+- El backtest (dispersión, ajuste por bajas y legs reales de /parley) se rehace cada 7 días, no solo la primera vez.
+- Botón "Actualizar datos" con barra de porcentaje.
+- Un box score de prórroga que aún no publica la NBA ya no detiene la actualización: se reintenta la próxima vez.
+
 ## v0.1.12 — 2026-11-15
 
 - Prueba como celular (Android emulado, 375 px, toques): sin desborde, letra mínima 13 px, partidos y apartados

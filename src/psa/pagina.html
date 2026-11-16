@@ -158,6 +158,8 @@ input{flex:1}
 .lesion .motivo{grid-column:1/-1;font-size:13px;color:var(--suave)}
 .temporada{background:var(--bloque);border-radius:14px;padding:14px;margin-bottom:12px}
 .temporada h2{font:700 22px/1 var(--cond);margin:0 0 4px}
+td.gano{color:var(--over);font-weight:700}
+td.perdio{color:var(--panama-rojo);font-weight:700}
 
 @media (prefers-reduced-motion:no-preference){details[open]>*:not(summary){animation:abrir .18s ease-out}}
 @keyframes abrir{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
@@ -391,6 +393,25 @@ const vistas = {
       el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier modelo'), el('th', {}, 'Brier L10'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90')),
         ...Object.entries(m).map(([s, v]) => el('tr', {}, el('td', {}, {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'}[s] || s),
           el('td', {}, num(v.brier_modelo, 3)), el('td', {}, num(v.brier_acierto_l10, 3)), el('td', {}, num(v.mae_modelo, 2)), el('td', {}, pct(v.cobertura_10_90)))))));
+    const r = D.resultados;
+    const nombres = {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'};
+    if (r) {
+      const sec = [el('h2', {}, 'Resultados'),
+        el('p', {class: 'nota'}, `${r.dias} días ya jugados (${r.desde} a ${r.hasta}), calificados en cada actualización. Sesgo es lo real menos lo proyectado; el factor es la corrección que ya se aplica a las proyecciones nuevas (1.000 = sin cambio). El rango 10-90 debería atrapar cerca del 80 %.`),
+        el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Casos'), el('th', {}, 'Sesgo'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90'), el('th', {}, 'Factor')),
+          ...Object.entries(r.por_stat).map(([s, v]) => el('tr', {}, el('td', {}, nombres[s] || s), el('td', {}, String(v.n)),
+            el('td', {}, num(v.sesgo, 2)), el('td', {}, num(v.mae, 2)), el('td', {}, pct(v.cobertura_10_90)), el('td', {}, num(v.factor, 3)))))];
+      const ln = r.lineas;
+      if (ln.n) {
+        sec.push(el('p', {class: 'nota'}, `Contra las líneas guardadas, el lado más probable del modelo acertó ${ln.aciertos} de ${ln.n}.` +
+          (ln.n_mercado ? ` Brier modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)} (menor es mejor).` : '')));
+        sec.push(el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
+          ...ln.ultimos.map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, x.f.slice(8) + '/' + x.f.slice(5, 7))),
+            el('td', {}, `${{puntos: 'PTS', rebotes: 'REB', asistencias: 'AST'}[x.m] || x.m} ${x.lado} ${x.l}`), el('td', {}, pct(x.p)),
+            el('td', {class: x.ok ? 'gano' : 'perdio'}, `${x.real} ${x.ok ? '✓' : '✗'}`)))));
+      }
+      out.splice(1, 0, el('section', {class: 'temporada'}, ...sec));  // Lo más reciente va primero.
+    }
     const l = b.legs_reales;
     if (l && l.legs_decididos) out.push(el('section', {class: 'temporada'}, el('h2', {}, 'Tus legs reales'),
       el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier')),

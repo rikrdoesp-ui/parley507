@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .. import config, db
-from . import lesiones, modelo
+from . import lesiones, modelo, resultados
 
 DIAS_PLANTILLA = 30  # Un jugador entra en la plantilla si jugó para ese equipo en los últimos 30 días.
 MINUTOS_INESTABLES = 6.0  # Desviación de minutos (L10) a partir de la cual se marca riesgo.
@@ -85,6 +85,7 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
     k, nota_k = k_vigente(con)
     spreads = spreads_estimados(con)
     fraccion, alfa = ajuste_ausencias_vigente(con)
+    factores = resultados.factores_vigentes(con)  # Corrección aprendida de los días ya jugados.
     filas = []
     for (_, equipo), g in df.groupby(["game_id", "team_id"]):
         ultimos = hist[hist.team_id == equipo].sort_values("game_date").game_id.drop_duplicates().tail(3)
@@ -133,7 +134,7 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                         "estado": r.estado, "escenario": nombre, "minutos": mins[r.player_id], "min_sd": r.min_sd,
                         "n_previos": int(r.n_previos), "data_cutoff": corte, "notas": "; ".join(notas), "spread": spread}
                 for stat in modelo.ESTADISTICAS:
-                    mu = medias.get(r.player_id, {}).get(stat, np.nan)
+                    mu = medias.get(r.player_id, {}).get(stat, np.nan) * factores[stat]
                     bajo, alto = modelo.intervalo(mu, k[stat]) if pd.notna(mu) else (np.nan, np.nan)
                     fila.update({f"mu_{stat}": mu, f"k_{stat}": k[stat], f"p10_{stat}": bajo, f"p90_{stat}": alto})
                 filas.append(fila)

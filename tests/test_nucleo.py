@@ -208,3 +208,42 @@ def test_resolver_jugador_abreviado_y_ambiguo():
     assert parley_io.resolver_jugador("M. Bridges", plantilla) == 1
     assert parley_io.resolver_jugador("Jalen Williams", plantilla) == 2
     assert parley_io.resolver_jugador("J. Williams", plantilla) is None
+
+
+# --- Resultados ---------------------------------------------------------------------
+
+def test_factor_sesgo_se_encoge_con_poca_muestra_y_tiene_tope():
+    from psa.nba import resultados
+    assert resultados.factor_sesgo(110, 100, 0) == 1.0
+    assert 1 < resultados.factor_sesgo(110, 100, 100) < 1.01  # Poca muestra: casi no corrige.
+    assert resultados.factor_sesgo(200, 100, 10**7) == pytest.approx(1 + resultados.TOPE_FACTOR)
+
+
+def test_calificar_usa_la_proyeccion_previa_y_no_aplica_dos_veces_el_factor(tmp_path):
+    from psa.nba import resultados
+    con = db.conectar(tmp_path / "t.sqlite")
+    con.execute("INSERT INTO players VALUES (1, 'Ana Pérez', 'ana perez')")
+    con.execute("INSERT INTO games(game_id, season, season_type, game_date, start_time_utc) "
+                "VALUES ('g1', '2026-27', 'Regular', '2026-11-14', '2026-11-15T00:00:00+00:00')")
+    con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, "
+                "rebounds, assists, source_id) VALUES ('g1', 1, 9, '2026-27', '2026-11-14', 30, 25, 5, 4, 0)")
+    # Corrección de 1.1 en puntos vigente desde antes de la proyección previa.
+    con.execute("INSERT INTO model_runs(sport, model_version, params_json, created_at) VALUES ('NBA', ?, ?, ?)",
+                (resultados.VERSION, '{"factores": {"points": 1.1, "rebounds": 1, "assists": 1}}', "2026-11-13T00:00:00+00:00"))
+    # Corrección posterior a todas las proyecciones: no aplica a ninguna (antes rompía con la máscara vacía).
+    con.execute("INSERT INTO model_runs(sport, model_version, params_json, created_at) VALUES ('NBA', ?, ?, ?)",
+                (resultados.VERSION, '{"factores": {"points": 0.9, "rebounds": 1, "assists": 1}}', "2026-11-20T00:00:00+00:00"))
+    for generado, media in (("2026-11-14T20:00:00+00:00", 22.0), ("2026-11-15T03:00:00+00:00", 99.0)):  # Antes / después.
+        con.execute("INSERT INTO predictions(game_id, game_date, player_id, market, scenario, projected_mean, dispersion,"
+                    " lower_interval, upper_interval, model_version, generated_at, data_cutoff) VALUES "
+                    "('g1', '2026-11-14', 1, 'puntos', 'base', ?, 8, 15, 30, 'm', ?, '2026-11-13')", (media, generado))
+    con.execute("INSERT INTO player_props(game_date, player_id, player_name, market, line, over_odds, under_odds, "
+                "bookmaker, captured_at, entry_method) VALUES ('2026-11-14', 1, 'Ana Pérez', 'puntos', 19.5, 1.9, 1.9, "
+                "'Stake', 'x', 'MANUAL')")
+    df = resultados.calificar(con)
+    assert len(df) == 1
+    fila = df.iloc[0]
+    assert fila.projected_mean == 22.0 and fila.crudo == pytest.approx(20.0)
+    assert fila.lado == "over" and fila.acierto == 1 and fila.p_mercado == pytest.approx(0.5)
+    factores, metricas = resultados.resumir(df)
+    assert factores["points"] > 1 and metricas["lineas"]["aciertos"] == 1

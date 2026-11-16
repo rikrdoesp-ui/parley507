@@ -3,7 +3,7 @@ import json
 import pandas as pd
 import streamlit as st
 
-from psa import ui
+from psa import config, ui
 from psa.nba import backtest
 
 st.title("Backtest NBA")
@@ -17,7 +17,7 @@ if st.button("Correr backtest", type="primary"):
 r = st.session_state.get("bt")
 if r is None:
     with ui.conexion() as con:
-        fila = con.execute("SELECT metrics_json, created_at FROM model_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+        fila = con.execute("SELECT metrics_json, created_at FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1", (config.MODELO_NBA,)).fetchone()
     if not fila:
         st.info("Aún no hay backtest. Pulsa Correr backtest.")
         st.stop()

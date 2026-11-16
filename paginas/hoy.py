@@ -1,16 +1,19 @@
 import pandas as pd
 import streamlit as st
 
-from psa import actualizar, ui
+from psa import actualizar, config, ui
+from psa.nba import resultados
 
 st.title("Hoy")
 fecha = ui.elegir_fecha()
 
 col1, col2 = st.columns(2)
-if col1.button("Actualizar datos", type="primary", help="Descarga box scores, calendario y lesiones; recalcula, exporta a /parley y publica la página del celular."):
-    with st.status("Actualizando...", expanded=True) as estado:
+if col1.button("Actualizar datos", type="primary", help="Descarga box scores, calendario y lesiones; califica los días ya jugados y corrige el modelo; recalcula, exporta a /parley y publica la página del celular."):
+    barra = st.progress(0, text="Empezando...")
+    with st.status("Actualizando...", expanded=False) as estado:
         try:
-            r = actualizar.actualizar(fecha, aviso=st.write)
+            r = actualizar.actualizar(fecha, aviso=st.write,
+                                      progreso=lambda pct, texto: barra.progress(pct / 100, text=f"{pct} %: {texto}"))
             estado.update(label="Actualización terminada", state="complete")
         except RuntimeError as error:
             estado.update(label="Falló la descarga", state="error")
@@ -39,7 +42,7 @@ with ui.conexion() as con:
     lesiones = con.execute("""SELECT MAX(reported_at), COUNT(*) FROM nba_injuries WHERE game_date = ? AND entry_method = 'PDF'""",
                            (fecha,)).fetchone()
     manuales = con.execute("SELECT COUNT(*) FROM nba_injuries WHERE game_date = ? AND entry_method = 'MANUAL'", (fecha,)).fetchone()[0]
-    modelo = con.execute("SELECT created_at FROM model_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+    modelo = con.execute("SELECT created_at FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1", (config.MODELO_NBA,)).fetchone()
     alertas = pd.read_sql("""SELECT checked_at, severity AS severidad, table_name AS tabla, record_id AS registro, message AS mensaje
                              FROM data_quality_log ORDER BY quality_id DESC LIMIT 30""", con)
 
@@ -62,3 +65,19 @@ if alertas.empty:
     st.caption("Sin alertas de calidad.")
 else:
     st.dataframe(alertas, hide_index=True, width="stretch")
+
+st.subheader("Resultados: lo que el modelo aprendió")
+with ui.conexion() as con:
+    res = resultados.ultimas_metricas(con)
+if not res:
+    st.caption("Todavía no hay días jugados con proyección. Se califican solos al actualizar.")
+else:
+    st.caption(f"{res['dias']} días calificados ({res['desde']} a {res['hasta']}). Factor = corrección que se aplica "
+               "a la media de las proyecciones nuevas (1 = sin cambio).")
+    st.dataframe(pd.DataFrame(res["por_stat"]).T, width="stretch")
+    l = res["lineas"]
+    if l["n"]:
+        st.metric("Lado más probable contra líneas guardadas", f"{l['aciertos']} de {l['n']}",
+                  f"Brier modelo {l['brier_modelo_vs']} vs mercado {l['brier_mercado']}" if l["n_mercado"] else None,
+                  delta_color="off")
+        st.dataframe(pd.DataFrame(l["ultimos"]), hide_index=True, width="stretch")

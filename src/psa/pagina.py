@@ -14,7 +14,7 @@ import pandas as pd
 
 from . import config, marca
 from .db import clave_nombre
-from .nba import lesiones, modelo, proyeccion
+from .nba import lesiones, modelo, proyeccion, resultados
 from .nba import props as props_nba
 
 RAIZ = Path(__file__).resolve().parents[2]
@@ -159,7 +159,8 @@ def datos(con, fecha: str) -> dict:
          "motivo": r.reason or "", "manual": bool(r.manual)}
         for r in estados.sort_values(["team_id", "player_name"]).itertuples()]
 
-    corrida = con.execute("SELECT metrics_json, created_at FROM model_runs ORDER BY run_id DESC LIMIT 1").fetchone()
+    corrida = con.execute("SELECT metrics_json, created_at FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1",
+                          (config.MODELO_NBA,)).fetchone()
     backtest = {**json.loads(corrida[0]), "fecha": corrida[1][:10]} if corrida else None
     reporte = con.execute("SELECT MAX(reported_at) FROM nba_injuries WHERE game_date = ? AND entry_method = 'PDF'",
                           (fecha,)).fetchone()[0]
@@ -174,6 +175,7 @@ def datos(con, fecha: str) -> dict:
                      for r in juegos.itertuples()],
         "jugadores": jugadores, "lesiones": lista_lesiones, "props": lineas, "con_precio": props_nba.hay_precio(tabla),
         "backtest": backtest,
+        "resultados": resultados.ultimas_metricas(con),
     }
 
 

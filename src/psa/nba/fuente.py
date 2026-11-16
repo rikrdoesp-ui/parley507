@@ -115,8 +115,12 @@ def cargar_regulacion(con, limite: int | None = None) -> int:
           AND game_id NOT IN (SELECT DISTINCT game_id FROM nba_player_game_stats_regulation)
         ORDER BY game_date DESC""")]
     for juego in pendientes[:limite]:
-        caja = llamar(boxscoretraditionalv3.BoxScoreTraditionalV3, game_id=juego, start_period=1, end_period=4,
-                      range_type=1, start_range=0, end_range=0)[0]
+        try:
+            caja = llamar(boxscoretraditionalv3.BoxScoreTraditionalV3, game_id=juego, start_period=1, end_period=4,
+                          range_type=1, start_range=0, end_range=0, intentos=2)[0]
+        except RuntimeError as error:  # Box score aún no publicado: queda pendiente y se reintenta la próxima vez.
+            db.calidad(con, "nba_player_game_stats_regulation", juego, "boxscore_ot", "media", str(error))
+            continue
         fuente = db.registrar_fuente(con, "NBA (nba_api)", f"BoxScoreTraditionalV3 periodos 1-4 {juego}", URL, LICENCIA)
         con.executemany("INSERT OR REPLACE INTO nba_player_game_stats_regulation VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         [(juego, int(r.personId), minutos(r.minutes), r.points, r.reboundsTotal, r.assists,
