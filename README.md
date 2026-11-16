@@ -72,7 +72,10 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
 
 1. **Minutos:** media exponencial de los partidos jugados (vida media 4 partidos). Ajustables a mano con razón.
 2. **Tasa:** estadística por minuto, media exponencial más larga (vida media 12 partidos).
-3. **Media:** minutos × tasa. **Distribución:** binomial negativa; su dispersión `k` se ajusta en el backtest con
+3. **Media:** minutos × tasa, pasada por una capa de regresión que la combina con otras lecturas del mismo jugador
+   (últimos 4 partidos, media por partido, tasa larga de 40 partidos, L10) y con la tendencia de sus minutos. Los
+   pesos salen por mínimos cuadrados en el backtest, solo con partidos anteriores. Corrige la regresión a la media:
+   baja a los de media alta y sube a los de media baja. **Distribución:** binomial negativa; su dispersión `k` se ajusta en el backtest con
    datos anteriores al periodo evaluado.
 4. **Bajas (efecto de uso):** Out no juega. Por cada baja nueva de rotación, sus compañeros reciben una parte de la
    producción que deja (alfa) en proporción a lo que ya producen, y opcionalmente una fracción de sus minutos. Ambos
@@ -87,8 +90,10 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
 Spread y palizas: cada partido muestra un spread estimado propio y los titulares de partidos con spread de 12 o más
 llevan un aviso de riesgo de paliza. No se les quitan minutos: se probó en el backtest y no mejoraba.
 
-Limitaciones conocidas: el efecto de uso es un promedio y se queda corto cuando faltan varios del mismo puesto; no modela rival, ritmo, descanso, blowout ni cambios
-de equipo; la titularidad histórica es desconocida (NULL). Solo temporada regular: en playoffs no hay box scores
+Limitaciones conocidas: el efecto de uso es un promedio y se queda corto cuando faltan varios del mismo puesto; no
+modela rival, ritmo ni descanso (probados el 16-nov-2026: suman menos de 0,001 de Brier), ni blowout ni cambios de
+equipo. Con box scores el modelo solo no le gana a las líneas reales (15-nov: Brier 0,263 contra 0,250 del mercado
+en 225 líneas de Stake); por eso edge y VE usan el ancla al mercado; la titularidad histórica es desconocida (NULL). Solo temporada regular: en playoffs no hay box scores
 nuevos, así que desde la segunda ronda no habrá proyecciones hasta añadir ese tipo de temporada.
 
 ## Overtime

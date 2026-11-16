@@ -28,12 +28,21 @@ def k_vigente(con) -> tuple[dict, str]:
     return {**modelo.K_DEFECTO, **json.loads(fila[0])["k"]}, f"dispersión ajustada en el backtest del {fila[1][:10]}"
 
 
-def ajuste_ausencias_vigente(con) -> tuple[float, float]:
-    """(fracción de minutos repartidos, alfa de uso) elegidos en el último backtest; sin backtest, sin ajuste."""
+def _params(con) -> dict:
     fila = con.execute("SELECT params_json FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1",
                        (config.MODELO_NBA,)).fetchone()
-    params = json.loads(fila[0]) if fila else {}
+    return json.loads(fila[0]) if fila else {}
+
+
+def ajuste_ausencias_vigente(con) -> tuple[float, float]:
+    """(fracción de minutos repartidos, alfa de uso) elegidos en el último backtest; sin backtest, sin ajuste."""
+    params = _params(con)
     return params.get("fraccion_minutos", 0.0), params.get("alfa_uso", 0.0)
+
+
+def capa_vigente(con) -> dict | None:
+    """Coeficientes de la capa de regresión del último backtest; sin backtest, minutos x tasa a secas."""
+    return _params(con).get("capa")
 
 
 def spreads_estimados(con) -> dict:
@@ -71,7 +80,8 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                                   "objetivo": True})
     if not objetivos:
         return pd.DataFrame()
-    df = modelo.con_proyeccion(pd.concat([hist.assign(objetivo=False), pd.DataFrame(objetivos)], ignore_index=True))
+    df = modelo.con_proyeccion(pd.concat([hist.assign(objetivo=False), pd.DataFrame(objetivos)], ignore_index=True),
+                               capa_vigente(con))
     temporada = config.temporada_actual(date.fromisoformat(fecha))
     jugados = df[df.objetivo.eq(False) & (df.season == temporada) & (df.minutes > 0)]
     factores = resultados.factores_temporada(jugados)  # Sesgo de la temporada, aprendido de lo ya jugado.

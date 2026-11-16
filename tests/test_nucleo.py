@@ -64,6 +64,24 @@ def test_muestra_minima():
     assert df.loc[modelo.MUESTRA_MINIMA:, "mu_points"].notna().all()
 
 
+def test_capa_no_empeora_el_ajuste_y_no_ve_el_partido():
+    rng = np.random.default_rng(0)
+    filas = [{"game_id": f"G{i:03d}", "player_id": j, "game_date": str(pd.Timestamp("2026-01-01") + pd.Timedelta(days=i))[:10],
+              "minutes": float(m), "points": float(rng.poisson(0.5 * m)), "rebounds": float(rng.poisson(0.2 * m)),
+              "assists": float(rng.poisson(0.1 * m))}
+             for j in (1, 2, 3) for i in range(60) for m in [np.clip(rng.normal(18 + 5 * j, 4), 5, 40)]]
+    df = modelo.con_proyeccion(pd.DataFrame(filas))
+    capa = modelo.ajustar_capa(df)
+    con = modelo.aplicar_capa(df, capa).dropna(subset=["mu_points"])
+    assert ((con.points - con.mu_points) ** 2).sum() <= ((con.points - con.base_points) ** 2).sum()
+    assert con.mu_pra.to_numpy() == pytest.approx((con.mu_points + con.mu_rebounds + con.mu_assists).to_numpy())
+    cambiado = pd.DataFrame(filas)
+    cambiado.loc[len(cambiado) - 1, ["points", "minutes"]] = [99.0, 48.0]
+    ultimo = len(df) - 1  # con_proyeccion ordena por jugador y fecha: la última fila es la misma.
+    assert modelo.con_proyeccion(cambiado, capa).loc[ultimo, "mu_points"] == pytest.approx(
+        modelo.con_proyeccion(pd.DataFrame(filas), capa).loc[ultimo, "mu_points"])
+
+
 def test_over_y_under_suman_uno_en_media_linea_y_excluyen_push():
     assert modelo.p_over(20, 8, 19.5) + modelo.p_under(20, 8, 19.5) == pytest.approx(1)
     assert modelo.p_over(20, 8, 20) + modelo.p_under(20, 8, 20) < 1

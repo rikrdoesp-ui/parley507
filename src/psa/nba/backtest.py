@@ -164,16 +164,24 @@ def elegir_combo(ausencias: dict) -> tuple[float, float]:
 
 
 def correr(con) -> dict:
-    df = modelo.con_proyeccion(historial(con))
-    temporadas = sorted(df.season.unique())
+    crudo = modelo.con_proyeccion(historial(con))
+    temporadas = sorted(crudo.season.unique())
+    # La capa y la k que usan las proyecciones del día se ajustan con todo lo disponible.
+    capa_final = modelo.ajustar_capa(crudo)
+    final = modelo.aplicar_capa(crudo, capa_final)
+    # Cada temporada de prueba lleva la capa ajustada solo con lo anterior a su inicio. La primera, que solo
+    # sirve de entrenamiento de la dispersión, usa la suya propia (nada posterior).
+    capas = {t: modelo.ajustar_capa(crudo[crudo.game_date < crudo.loc[crudo.season == t, "game_date"].min()])
+             for t in temporadas[1:]}
+    capas[temporadas[0]] = modelo.ajustar_capa(crudo[crudo.season == temporadas[0]])
+    df = pd.concat([modelo.aplicar_capa(crudo[crudo.season == t], capas[t]) for t in temporadas], ignore_index=True)
     metricas, calibraciones, ks = {}, [], {}
-    for t in temporadas[1:]:  # La primera temporada solo sirve de entrenamiento.
+    for t in temporadas[1:]:
         ks[t], m, c = evaluar_temporada(df, t)
         metricas[t] = m
         calibraciones.append(c)
-    # La k que usan las proyecciones del día se ajusta con todo lo disponible.
     k_final = {s: modelo.ajustar_k_tramos(d.min_proy, d[f"mu_{s}"], d[s])
-               for s in modelo.TODAS for d in [df.dropna(subset=[f"mu_{s}", s])]}
+               for s in modelo.TODAS for d in [final.dropna(subset=[f"mu_{s}", s])]}
     ausencias = evaluar_ausencias(df, ks)
     fraccion, alfa = elegir_combo(ausencias)
     legs = legs_con_modelo(df, con, ks, k_final)
@@ -193,7 +201,7 @@ def correr(con) -> dict:
     con.execute("INSERT INTO model_runs(sport, model_version, training_cutoff, params_json, metrics_json, created_at)"
                 " VALUES ('NBA', ?, ?, ?, ?, ?)",
                 (config.MODELO_NBA, str(df.game_date.max()),
-                 json.dumps({"k": k_final, "vida_minutos": modelo.VIDA_MINUTOS, "vida_tasa": modelo.VIDA_TASA,
+                 json.dumps({"k": k_final, "capa": capa_final, "vida_minutos": modelo.VIDA_MINUTOS, "vida_tasa": modelo.VIDA_TASA,
                              "muestra_minima": modelo.MUESTRA_MINIMA, "fraccion_minutos": fraccion, "alfa_uso": alfa}),
                  json.dumps(resultado), db.ahora_utc()))
     con.commit()

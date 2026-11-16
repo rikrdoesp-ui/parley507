@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.1.27 — 2026-11-16
+
+- Capa de regresión sobre la media (modelo nba-min-tasa-nb-0.4): minutos × tasa se pasaba con los jugadores de
+  media alta y se quedaba corto con los de media baja. La capa combina esa media con los últimos 4 partidos, la
+  media por partido, la tasa larga (40 partidos), el L10 y la tendencia de minutos; los pesos se ajustan en el
+  backtest solo con partidos anteriores. El Brier baja en las 6 áreas y las 2 temporadas (puntos 0,2438 a 0,2408 en
+  2025-26 y 0,2345 a 0,2327 en 2026-27; PRA 0,2440 a 0,2410 y 0,2350 a 0,2326). El error medio baja en 2026-27
+  (PRA 6,41 a 6,35) y sube un poco en 2025-26 (6,07 a 6,10), donde la capa solo tuvo una temporada para ajustarse.
+- Probado y descartado: defensa del rival, ritmo, descanso, localía, spread y volumen de tiro (menos de 0,001 de
+  Brier y no en las dos temporadas); gradient boosting con las mismas variables (igual que la capa); dispersión por
+  máxima verosimilitud (igual que por momentos).
+- Contra las 225 líneas de Stake del 15-11 el modelo solo sigue por debajo del mercado: Brier 0,2654 a 0,2631, mercado
+  0,2501; lado acertado 51 % antes y después. Es un solo día.
+
 ## v0.1.26 — 2026-11-16
 
 - Jugadores: separados por partido y, dentro, por equipo (en PC los dos equipos lado a lado).

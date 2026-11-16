@@ -35,10 +35,11 @@ def agregar_combos(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def con_proyeccion(df: pd.DataFrame) -> pd.DataFrame:
+def con_proyeccion(df: pd.DataFrame, capa: dict | None = None) -> pd.DataFrame:
     """Agrega a cada fila (jugador, partido) la proyección hecha solo con sus partidos anteriores.
 
     Espera columnas player_id, game_date, game_id, minutes y ESTADISTICAS. Filas futuras llevan NaN.
+    Con `capa` (coeficientes de `ajustar_capa`), la media sale de la capa de regresión; sin ella, minutos x tasa.
     """
     df = df.sort_values(["player_id", "game_date", "game_id"]).reset_index(drop=True)
     jugador = df["player_id"]
@@ -49,11 +50,20 @@ def con_proyeccion(df: pd.DataFrame) -> pd.DataFrame:
     df["min_sd"] = _por_jugador(min_prev, jugador, lambda s: s.rolling(10, min_periods=3).std())
     den = _por_jugador(min_prev, jugador, lambda s: s.ewm(halflife=VIDA_TASA).mean())
     valido = previos >= MUESTRA_MINIMA
+    # Variables de la capa: hacia dónde van los minutos (media larga y último partido contra la media corta).
+    df["min_d12"] = den - df["min_proy"]
+    df["min_dult"] = min_prev - df["min_proy"]
+    den_largo = _por_jugador(min_prev, jugador, lambda s: s.ewm(halflife=VIDA_LARGA).mean())
     for stat in ESTADISTICAS:
         prev = df.groupby("player_id", sort=False)[stat].shift()
         num = _por_jugador(prev, jugador, lambda s: s.ewm(halflife=VIDA_TASA).mean())
         df[f"tasa_{stat}"] = (num / den).where(valido)
         df[f"mu_{stat}"] = (df["min_proy"] * df[f"tasa_{stat}"]).where(valido)
+        df[f"base_{stat}"] = df[f"mu_{stat}"]
+        df[f"e12_{stat}"] = num
+        df[f"e4_{stat}"] = _por_jugador(prev, jugador, lambda s: s.ewm(halflife=VIDA_MINUTOS).mean())
+        df[f"larga_{stat}"] = (_por_jugador(prev, jugador, lambda s: s.ewm(halflife=VIDA_LARGA).mean())
+                               / den_largo * df["min_proy"])
     agregar_combos(df)  # Filas futuras: NaN.
     for combo, partes in COMBOS.items():
         df[f"mu_{combo}"] = sum(df[f"mu_{s}"] for s in partes)
@@ -63,6 +73,48 @@ def con_proyeccion(df: pd.DataFrame) -> pd.DataFrame:
         # Últimos 10 valores previos, para el acierto L10 a una línea (línea base del backtest).
         for i in range(1, 11):
             df[f"lag{i}_{stat}"] = df.groupby("player_id", sort=False)[stat].shift(i)
+    return aplicar_capa(df, capa) if capa else df
+
+
+# Capa de regresión: minutos x tasa se pasa con los jugadores de media alta y se queda corto con los de media baja
+# (regresión a la media). La capa combina varias lecturas del mismo jugador (reciente, media, larga, L10) y la
+# tendencia de sus minutos, con pesos por mínimos cuadrados ajustados en el backtest solo con partidos anteriores.
+# Probado y descartado (16-nov-2026): rival, ritmo, descanso, localía, spread y volumen de tiro suman menos de
+# 0,001 de Brier y no en las dos temporadas; un gradient boosting con las mismas variables no mejora a la capa.
+VIDA_LARGA = 40
+LECTURAS = ["base", "larga", "e4", "e12", "l10"]
+MU_MINIMA = 0.05
+
+
+def _x(df: pd.DataFrame, stat: str) -> np.ndarray:
+    return np.column_stack([df[f"{v}_{stat}"] for v in LECTURAS]
+                           + [df["min_d12"], df["min_dult"], np.ones(len(df))]).astype(float)
+
+
+def ajustar_capa(df: pd.DataFrame) -> dict:
+    """{estadística: coeficientes} por mínimos cuadrados, con las filas de `con_proyeccion` ya jugadas."""
+    capa = {}
+    for stat in ESTADISTICAS:
+        x, y = _x(df, stat), df[stat].to_numpy(dtype=float)
+        ok = np.isfinite(x).all(axis=1) & np.isfinite(y)
+        capa[stat] = [round(float(b), 5) for b in np.linalg.lstsq(x[ok], y[ok], rcond=None)[0]]
+    return capa
+
+
+def aplicar_capa(df: pd.DataFrame, capa: dict) -> pd.DataFrame:
+    """Reemplaza mu_ y tasa_ por las de la capa. Una fila sin alguna variable conserva minutos x tasa."""
+    df = df.copy()
+    for stat in ESTADISTICAS:
+        x = _x(df, stat)
+        ok = np.isfinite(x).all(axis=1)
+        df[f"mu_{stat}"] = np.where(ok, np.clip(np.nan_to_num(x) @ np.asarray(capa[stat]), MU_MINIMA, None),
+                                    df[f"base_{stat}"])
+        # shortcut: la capa no es proporcional a los minutos, así que esta tasa infla un poco a los suplentes de
+        # pocos minutos si se les suman minutos (reparto por bajas o minutos a mano). Hoy el backtest elige no
+        # repartir minutos (fracción 0); si pasa a repartirlos, usar la tasa base para los minutos extra.
+        df[f"tasa_{stat}"] = df[f"mu_{stat}"] / df["min_proy"]
+    for combo, partes in COMBOS.items():
+        df[f"mu_{combo}"] = sum(df[f"mu_{s}"] for s in partes)
     return df
 
 
