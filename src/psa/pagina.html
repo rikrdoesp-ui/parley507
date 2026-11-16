@@ -140,6 +140,7 @@ h2.seccion{font:700 22px/1.1 var(--cond);margin:26px 0 4px}
 .ficha .encabezado{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
 .ficha .nombre{font:600 21px/1.1 var(--cond)}
 .ficha .datos{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:13px;color:var(--suave);margin-top:2px}
+@media (max-width:420px){.ficha th:nth-child(4),.ficha td:nth-child(4){display:none}}
 .estado-lesion{font:600 15px/1 var(--cond)}
 .Out{color:var(--neg)} .Doubtful,.Questionable{color:var(--duda)} .Probable,.Available{color:var(--pos)}
 table{width:100%;border-collapse:collapse;font-size:13.5px;margin-top:8px}
@@ -273,6 +274,15 @@ function filaProp({jugador, lado, linea, prob, mercado, cuota, valor, media, min
 }
 const avisos = texto => (texto || '').split('; ').filter(n => n && !n.startsWith('dispersión') && !n.startsWith('ajuste por'));
 
+// Prop real: la línea de Stake (si hay) y la línea segura del modelo (75 % o más) para buscar en las alternativas.
+const LADO = l => l === 'over' ? 'Over' : 'Under';
+function propReal(p) {
+  const stake = p.tipo === 'real' && p.casa && !p.casa.startsWith('Consenso') && p.alto;
+  return [stake ? el('span', {class: 'lado-' + p.alto.lado}, `${LADO(p.alto.lado)} ${num(p.linea)}`, p.alto.cuota ? ` a ${num(p.alto.cuota, 2)}` : '')
+                : el('span', {class: 'suave'}, 'Sin Stake'),
+    p.segura ? el('span', {class: 'bajo'}, `Segura: ${LADO(p.segura.lado)} ${num(p.segura.linea)}, ${pct(p.segura.p)}`) : ''];
+}
+
 // Ficha de jugador con sus props.
 function fichaJugador(j) {
   const filas = MERCADOS.filter(k => j.props[k]).map(k => {
@@ -281,6 +291,7 @@ function fichaJugador(j) {
       el('td', {class: 'proy'}, num(p.media)),
       el('td', {}, vacio(p.linea) ? '—' : num(p.linea) + (p.tipo === 'ref' ? '*' : ''),
         p.aciertos ? el('span', {class: 'bajo'}, `${p.aciertos[0]} de ${p.aciertos[1]}`) : ''),
+      el('td', {class: 'prop-real'}, propReal(p)),
       el('td', {}, p.alto ? el('span', {class: 'lado-' + p.alto.lado}, `${p.alto.lado === 'over' ? 'Over' : 'Under'} ${pct(p.alto.p)}`) : '—',
         !p.alto || vacio(p.alto.ve) ? '' : el('span', {class: 'bajo ' + signo(p.alto.ve)}, `VE ${ve(p.alto.ve)}`)));
   });
@@ -289,7 +300,7 @@ function fichaJugador(j) {
     el('div', {class: 'datos'}, el('span', {}, `${num(j.min)} min proyectados`), j.sd ? el('span', {}, `desviación ${num(j.sd)}`) : '',
       el('span', {}, `${j.n} partidos de muestra`)),
     el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'L5'), el('th', {}, 'L10'), el('th', {}, 'Temp.'),
-      el('th', {}, 'Proy.'), el('th', {}, 'Línea'), el('th', {}, 'Más probable')), ...filas));
+      el('th', {}, 'Proy.'), el('th', {}, 'Línea'), el('th', {}, 'Prop real'), el('th', {}, 'Más probable')), ...filas));
   if (j.otros.length) f.append(el('details', {class: 'escenarios'}, el('summary', {}, `Si falta un compañero (${j.otros.length})`),
     ...j.otros.map(o => el('div', {class: 'suave'}, `${o.esc}: ${num(o.min)} min, ${num(o.m.pts && o.m.pts[0])} pts, ${num(o.m.reb && o.m.reb[0])} reb, ${num(o.m.ast && o.m.ast[0])} ast`))));
   const n = avisos(j.notas);

@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.1.20 — 2026-11-15
+
+- Ficha del jugador: columna "Prop real" con la línea de Stake y su cuota en el lado más probable (o "Sin Stake"),
+  y debajo la línea segura del modelo: la más exigente que todavía da 75 % o más, para buscarla entre las
+  alternativas de Stake (solo modelo, sin mercado). En pantallas de menos de 420 px se oculta la columna Temp.
+
 ## v0.1.19 — 2026-11-15
 
 - Parleys propuestos: se guardan los de partidos que aún no empiezan (la última versión antes del inicio) y se

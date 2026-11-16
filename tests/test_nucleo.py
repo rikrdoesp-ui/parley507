@@ -315,3 +315,11 @@ def test_parleys_se_guardan_antes_del_inicio_y_se_califican(tmp_path):
     r = combinadas.calificar(con)
     assert r["parleys"][0]["legs"][0]["real"] == 33 and r["parleys"][0]["estado"] == "gano"
     assert (r["decididos"], r["ganados"], r["esperados"]) == (1, 1, 0.36)
+
+
+def test_linea_segura():
+    over = modelo.linea_segura(37.0, 13.5, "over")
+    under = modelo.linea_segura(37.0, 13.5, "under")
+    assert over[0] < 37 < under[0] and over[1] >= 0.75 and under[1] >= 0.75
+    assert modelo.p_over(37.0, 13.5, over[0] + 1) < 0.75  # Es la más exigente que pasa el 75 %.
+    assert modelo.linea_segura(float("nan"), 5, "over") is None

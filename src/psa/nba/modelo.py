@@ -122,6 +122,29 @@ def intervalo(mu, k: float, bajo: float = 0.1, alto: float = 0.9):
     return nbinom.ppf(bajo, k, p), nbinom.ppf(alto, k, p)
 
 
+P_SEGURA = 0.75
+
+
+def linea_segura(mu: float, k: float, lado: str, p_minima: float = P_SEGURA) -> tuple[float, float] | None:
+    """(línea x.5, probabilidad) más exigente que el modelo aún da con p_minima o más en ese lado.
+
+    Over: la línea más alta con P(over) >= p_minima. Under: la más baja con P(under) >= p_minima.
+    Sirve para buscarla entre las líneas alternativas de Stake; es solo del modelo, sin mercado.
+    """
+    if mu is None or not np.isfinite(mu) or mu <= 0:
+        return None
+    lineas = np.arange(0.5, np.ceil(mu * 3) + 10.5)
+    if lado == "over":
+        p = p_over(mu, k, lineas)
+        ok = np.flatnonzero(p >= p_minima)
+        i = ok.max() if ok.size else None
+    else:
+        p = p_under(mu, k, lineas)
+        ok = np.flatnonzero(p >= p_minima)
+        i = ok.min() if ok.size else None
+    return None if i is None else (float(lineas[i]), round(float(p[i]), 3))
+
+
 def lineas_cercanas(mu: float, k: float) -> list[float]:
     """Líneas x.5 entre los percentiles 5 y 95, para exportar P(over) sin que /parley necesite SciPy."""
     bajo, alto = intervalo(mu, k, 0.05, 0.95)

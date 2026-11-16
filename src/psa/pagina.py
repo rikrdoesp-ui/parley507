@@ -84,6 +84,10 @@ def analizar_mercado(valores: list, temporada: list, mu, k, real: dict | None) -
     else:
         alto = lado
         salida["alto"] = {"lado": lado, "p": salida["p_lado"], "ve": None}
+    segura = modelo.linea_segura(float(mu), float(k), alto)
+    if segura:
+        salida["segura"] = {"lado": alto, "linea": segura[0], "p": segura[1],
+                            "aciertos": int(sum((v > segura[0]) if alto == "over" else (v < segura[0]) for v in valores[:10]))}
     ultimos = valores[:10]  # Aciertos del lado más probable en sus últimos 10.
     salida["aciertos"] = [int(sum((v > linea) if alto == "over" else (v < linea) for v in ultimos)), len(ultimos)]
     if real:
