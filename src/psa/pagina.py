@@ -6,6 +6,7 @@ ni el registro de apuestas, solo proyecciones, lesiones, líneas del día y el r
 import json
 import math
 import subprocess
+import time
 import tomllib
 from datetime import date, datetime
 from pathlib import Path
@@ -219,6 +220,9 @@ def publicar(fecha: str, raiz: Path = RAIZ) -> str:
     if git("diff", "--cached", "--quiet", "--", *rutas).returncode == 0:
         return "La página no cambió; no hay nada que subir."
     hecho = git("commit", "-m", f"Página del {fecha}", "--", *rutas)
+    if hecho.returncode:  # Falla suelta (PC recién despierta, OneDrive tomando el archivo): un reintento.
+        time.sleep(10)
+        hecho = git("commit", "-m", f"Página del {fecha}", "--", *rutas)
     if hecho.returncode:
         return f"No se pudo hacer el commit de la página: {hecho.stderr.strip() or hecho.stdout.strip()}"
     subida = git("push")
