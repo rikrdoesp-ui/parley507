@@ -297,3 +297,21 @@ def test_combinadas_suman_sus_partes_y_lo_real():
     assert ultima.mu_ra == pytest.approx(ultima.mu_rebounds + ultima.mu_assists)
     assert ultima.pr == ultima.points + ultima.rebounds
     assert set(modelo.COMBOS) <= set(modelo.K_DEFECTO)
+
+
+def test_parleys_se_guardan_antes_del_inicio_y_se_califican(tmp_path):
+    from psa.nba import combinadas
+    con = db.conectar(tmp_path / "t.sqlite")
+    con.execute("INSERT INTO players VALUES (1, 'Ana Pérez', 'ana perez'), (2, 'Bea Ruiz', 'bea ruiz')")
+    leg = lambda j, mercado, lado, linea: {"j": j, "mercado": mercado, "lado": lado, "linea": linea, "prob": 0.6, "cuota": 1.8}
+    parley = lambda partido: {"partido": partido, "legs": [leg("Ana Pérez", "PRA", "over", 30.5), leg("Bea Ruiz", "rebotes", "under", 6.5)],
+                              "prob": 0.36, "cuota": 3.24, "cuota_justa": 2.78, "ve": 0.17}
+    inicios = {"A @ B": "2099-01-01T00:00:00Z", "C @ D": "2000-01-01T00:00:00Z"}  # Uno futuro, uno ya empezado.
+    assert combinadas.guardar(con, "2026-11-14", [parley("A @ B"), parley("C @ D")], inicios) == 1
+    assert combinadas.calificar(con)["parleys"][0]["estado"] == "pendiente"  # Sin box score todavía.
+    con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, rebounds,"
+                " assists, source_id) VALUES ('g', 1, 9, '2026-27', '2026-11-14', 30, 20, 8, 5, 0),"
+                " ('g', 2, 9, '2026-27', '2026-11-14', 25, 10, 4, 2, 0)")
+    r = combinadas.calificar(con)
+    assert r["parleys"][0]["legs"][0]["real"] == 33 and r["parleys"][0]["estado"] == "gano"
+    assert (r["decididos"], r["ganados"], r["esperados"]) == (1, 1, 0.36)

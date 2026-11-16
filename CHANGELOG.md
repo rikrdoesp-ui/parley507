@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.1.19 — 2026-11-15
+
+- Parleys propuestos: se guardan los de partidos que aún no empiezan (la última versión antes del inicio) y se
+  califican solos con el box score. En Resultados: cuántos ganaron contra cuántos se esperaban por su probabilidad.
+  Lo propuesto con el partido ya empezado no cuenta.
+- Revisión de los parleys del 15-11 (propuestos con los partidos ya empezados, así que no cuentan en el registro):
+  ganaron 2 de 10 (SAS @ UTA, de 2 y de 3 legs); por probabilidad se esperaban 3,1. Legs: 9 de 16.
+- Textos: nota de Parley corta con "Cómo se eligen" plegable; avisos sin mayúsculas; mensajes vacíos que dicen
+  cuándo se llenan; VE y Brier explicados.
+- Revisión de código: minutos desconocidos toman la dispersión más prudente; el backtest de bajas usa la dispersión
+  de los minutos ajustados, como en producción (ahora elige repartir 25 % de los minutos del ausente).
+
 ## v0.1.18 — 2026-11-15
 
 Mejoras tras revisar los resultados del 15-11 y confirmarlas en el backtest (30 mil partidos de 2025-26 y 2026-27):

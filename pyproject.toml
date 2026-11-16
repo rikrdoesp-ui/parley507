@@ -1,6 +1,6 @@
 [project]
 name = "panama-sports-analytics"
-version = "0.1.18"
+version = "0.1.19"
 description = "Proyecciones NBA, NFL y Panama que alimentan /parley (uso personal)"
 requires-python = ">=3.12"
 dependencies = [

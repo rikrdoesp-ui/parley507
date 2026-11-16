@@ -172,6 +172,9 @@ td.gano{color:var(--over);font-weight:700}
 .leg.over{border-color:var(--over)} .leg.under{border-color:var(--under)}
 .leg-linea{display:flex;flex-wrap:wrap;gap:2px 10px;align-items:baseline;font-size:15px}
 .leg-p{margin-left:auto;font-weight:600}
+.leg-p.gano{color:var(--over)} .leg-p.perdio{color:var(--panama-rojo)}
+.estado-parley{margin-left:auto;font:700 16px/1 var(--cond);padding:4px 8px;border-radius:6px;border:1px solid var(--regla)}
+.estado-parley.gano{color:var(--over);border-color:var(--over)} .estado-parley.perdio{color:var(--panama-rojo);border-color:var(--panama-rojo)}
 .por-que{margin:4px 0 0;font-size:13px;line-height:1.45;color:var(--suave)}
 td.perdio{color:var(--panama-rojo);font-weight:700}
 
@@ -318,7 +321,7 @@ function vistaJuego(nombre) {
   const mejores = mejoresProps(jug);
   out.push(el('h2', {class: 'seccion'}, 'Lo que el modelo empuja'));
   if (mejores.some(x => x.p.tipo === 'real') && !mejores.some(x => x.p.ve > 0))
-    out.push(el('div', {class: 'aviso'}, 'Ninguna línea de Stake tiene VE positivo: son las que el modelo inclina a favor, pero el margen de la casa las deja en negativo.'));
+    out.push(el('div', {class: 'aviso'}, 'Ninguna línea de Stake tiene ventaja (VE positivo): son las que el modelo inclina a favor, pero el margen de la casa las deja en negativo.'));
   if (!mejores.length) out.push(el('p', {class: 'suave'}, 'Ninguna prop destaca en este partido.'));
   for (const {j, k, p: q} of mejores) out.push(filaProp({jugador: j.j, lado: q.lado, linea: q.linea, prob: q.p_lado,
     mercado: q.p_mercado, cuota: q.tipo === 'real' && !String(q.casa).startsWith('Consenso') ? q.cuota : null, valor: q.ve,
@@ -344,9 +347,9 @@ const vistas = {
   },
   Props() {
     const out = [];
-    if (!D.props.length) return [el('div', {class: 'aviso'}, 'PROYECCIÓN ESTADÍSTICA — SIN VALOR DE APUESTA CONFIRMADO'),
-      el('p', {class: 'vacio'}, 'Todavía no hay líneas para este día. Llegan cuando /parley lee Stake.')];
-    if (!D.con_precio) out.push(el('div', {class: 'aviso'}, 'PROYECCIÓN ESTADÍSTICA — SIN VALOR DE APUESTA CONFIRMADO'));
+    if (!D.props.length) return [el('div', {class: 'aviso'}, 'Solo proyección: todavía no hay cuota para medir el valor.'),
+      el('p', {class: 'vacio'}, 'Todavía no hay líneas de Stake para hoy. La página se actualiza sola cada 30 min.')];
+    if (!D.con_precio) out.push(el('div', {class: 'aviso'}, 'Solo proyección: todavía no hay cuota para medir el valor.'));
     // Un bloque plegable por partido (abierto el próximo en empezar). Dentro, por área y lado, de mayor a menor
     // probabilidad de salir. La más probable suele pagar menos: el VE dice si el precio la compensa.
     const grupos = new Map(D.partidos.map(p => [p.p, []]));
@@ -386,12 +389,14 @@ const vistas = {
       if (sin.length) bloque.append(el('p', {class: 'nota'}, `Sin proyección: ${sin.map(p => `${p.jugador} (${p.mercado})`).join(', ')}.`));
       out.push(bloque);
     }
-    out.push(el('p', {class: 'nota'}, 'La barra es la probabilidad de que la prop salga; la marca fina es lo que dice el mercado sin margen. El modelo mueve esa probabilidad como mucho 4 puntos. El VE solo existe con precio de una casa: el consenso de BettingPros es referencia.'));
+    out.push(el('p', {class: 'nota'}, 'La barra es la probabilidad de que la prop salga; la marca fina es lo que dice el mercado sin margen. El modelo mueve esa probabilidad como mucho 4 puntos. VE es la ganancia esperada por cada $1 y solo existe con precio de una casa: el consenso de BettingPros es referencia.'));
     return out;
   },
   Parley() {
-    if (!D.parleys || !D.parleys.length) return [el('p', {class: 'vacio'}, 'Hoy ninguna combinación pasa los filtros: hacen falta líneas de Stake con precio y legs de 55 % o más.')];
-    const out = [el('p', {class: 'nota'}, 'Por partido, los legs más probables con línea y precio de Stake: jugador sin duda, 20+ minutos estables, el lado salió en 6 o más de sus últimos 10, un leg por jugador y máximo 2 por equipo. La probabilidad supone legs independientes. Stake paga menos en "mismo juego": juégalo solo si su cuota llega a la justa. BET o PASS y el monto los decide /parley.')];
+    if (!D.parleys || !D.parleys.length) return [el('p', {class: 'vacio'}, 'Ningún leg pasa hoy los filtros. Aparecen cuando hay líneas de Stake con 55 % o más.')];
+    const out = [el('p', {class: 'nota'}, 'Los legs más probables de cada partido con líneas de Stake. Juégalo solo si Stake paga al menos la cuota justa.'),
+      el('details', {class: 'escenarios'}, el('summary', {}, 'Cómo se eligen'),
+        el('p', {class: 'nota'}, 'Jugador confirmado, 20+ minutos estables, cumplió 6 de sus últimos 10, 55 % o más, un leg por jugador y máximo 2 por equipo. Se calcula como si los legs fueran independientes; en un mismo partido no lo son del todo y Stake paga menos en "mismo juego". VE es la ganancia esperada por cada $1. Apostar o no, y cuánto, lo decide /parley.'))];
     const partidos = [...new Set(D.parleys.map(x => x.partido))];
     partidos.forEach((nombre, i) => {
       const info = D.partidos.find(x => x.p === nombre) || {};
@@ -409,7 +414,7 @@ const vistas = {
       }
       out.push(bloque);
     });
-    if (!D.parleys.some(x => x.ve > 0)) out.splice(1, 0, el('div', {class: 'aviso'}, 'Ninguno tiene VE positivo: el margen de la casa se multiplica en cada leg. Son los más probables, no apuestas con ventaja.'));
+    if (!D.parleys.some(x => x.ve > 0)) out.splice(1, 0, el('div', {class: 'aviso'}, 'Hoy ningún parley tiene ventaja: el margen de Stake se suma en cada leg. Son los más probables, no apuestas de valor.'));
     return out;
   },
   Jugadores() {
@@ -439,8 +444,20 @@ const vistas = {
     return out;
   },
   Resultados() {
-    const r = D.resultados, ln = r && r.lineas;
-    if (!ln || !ln.n) return [el('p', {class: 'vacio'}, 'Aún no termina ningún partido con línea. Los resultados aparecen solos al terminar.')];
+    const r = D.resultados, ln = r && r.lineas, pr = D.parleys_resultados;
+    const ESTADO = {gano: 'Ganó', perdio: 'Perdió', pendiente: 'Pendiente'};
+    const secParleys = !pr || !pr.parleys.length ? [] : [el('h2', {class: 'seccion'}, 'Parleys propuestos'),
+      el('p', {class: 'nota'}, pr.decididos ? `Ganaron ${pr.ganados} de ${pr.decididos}. Por su probabilidad se esperaban ${num(pr.esperados, 1)}. Solo cuentan los propuestos antes del inicio del partido.`
+        : 'Todavía no termina ningún partido con parley propuesto. Solo cuentan los propuestos antes del inicio.'),
+      ...pr.parleys.map(x => el('div', {class: 'combinada'},
+        el('div', {class: 'parley-cabeza'}, cruce(x.partido), el('span', {class: 'titulo'}, `${x.tam} legs`),
+          el('span', {}, `${x.f.slice(8)}/${x.f.slice(5, 7)}, prob. ${pct(x.prob)}`),
+          el('span', {class: 'estado-parley ' + x.estado}, ESTADO[x.estado])),
+        ...x.legs.map(l => el('div', {class: 'leg ' + l.lado}, el('div', {class: 'leg-linea'}, el('strong', {}, l.j),
+          el('span', {}, `${l.mercado} ${l.lado} ${l.linea}`),
+          el('span', {class: 'leg-p ' + (l.ok === true ? 'gano' : l.ok === false ? 'perdio' : '')},
+            l.real === null || l.real === undefined ? '—' : `${l.real} ${l.ok ? '✓' : '✗'}`))))))];
+    if (!ln || !ln.n) return [...secParleys, el('p', {class: 'vacio'}, 'Aún no termina ningún partido con línea. Los resultados aparecen solos al terminar.')];
     const CORTO = {puntos: 'PTS', rebotes: 'REB', asistencias: 'AST', pra: 'PRA', pr: 'PR', ra: 'RA'};
     const tabla = (legs, conPartido) => el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
       ...[...legs].sort((a, b) => b.p - a.p).map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, conPartido ? `${x.partido}, ${x.f.slice(8)}/${x.f.slice(5, 7)}` : '')),
@@ -470,15 +487,15 @@ const vistas = {
       }));
     }
     pintar();
-    return [
+    return [...secParleys, el('h2', {class: 'seccion'}, 'Props'),
       el('p', {class: 'nota'}, `Si se dieron o no las props con línea guardada, en el lado que el modelo veía más probable. Acertó ${ln.aciertos} de ${ln.n} (${pct(ln.aciertos / ln.n)}).` +
         (ln.n_mercado ? ` Error de probabilidad (Brier, menor es mejor): modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)}.` : '')),
       el('div', {class: 'selector', role: 'group', 'aria-label': 'Ordenar resultados'}, ...botones), cuerpo];
   },
   Modelo() {
     const b = D.backtest;
-    if (!b) return [el('p', {class: 'vacio'}, 'Todavía no hay backtest.')];
-    const out = [el('p', {class: 'nota'}, `${D.modelo}, backtest del ${b.fecha} con datos hasta ${D.corte || '—'}. En el Brier, menor es mejor; L10 es acertar con el promedio de los últimos 10.`)];
+    if (!b) return [el('p', {class: 'vacio'}, 'El modelo aún no se ha evaluado. Se evalúa en la próxima actualización.')];
+    const out = [el('p', {class: 'nota'}, `${D.modelo}, backtest del ${b.fecha} con datos hasta ${D.corte || '—'}. Brier es el error de probabilidad (menor es mejor); L10 es acertar con el promedio de los últimos 10.`)];
     for (const [temp, m] of Object.entries(b.metricas)) out.push(el('section', {class: 'temporada'}, el('h2', {}, `Temporada ${temp}`),
       el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier modelo'), el('th', {}, 'Brier L10'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90')),
         ...Object.entries(m).map(([s, v]) => el('tr', {}, el('td', {}, ESTADISTICAS[s] || s),

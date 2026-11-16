@@ -89,7 +89,9 @@ def ajustar_k_tramos(minutos, mu, y) -> list[float]:
 
 
 def _tramo(minutos):
-    return np.clip(np.searchsorted(BORDES_MINUTOS[1:-1], np.asarray(minutos, dtype=float), side="left"),
+    # Minutos desconocidos: el tramo más disperso (prudente), no el de los titulares.
+    minutos = np.nan_to_num(np.asarray(minutos, dtype=float), nan=0.0)
+    return np.clip(np.searchsorted(BORDES_MINUTOS[1:-1], minutos, side="left"),
                    0, len(BORDES_MINUTOS) - 2)
 
 

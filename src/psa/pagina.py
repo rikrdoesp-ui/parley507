@@ -164,6 +164,9 @@ def datos(con, fecha: str) -> dict:
          "motivo": r.reason or "", "manual": bool(r.manual)}
         for r in estados.sort_values(["team_id", "player_name"]).itertuples()]
 
+    parleys = combinadas.armar(jugadores)
+    inicios = {r.partido: r.start_time_utc for r in juegos.itertuples()}
+    combinadas.guardar(con, fecha, parleys, inicios)
     corrida = con.execute("SELECT metrics_json, created_at FROM model_runs WHERE model_version = ? ORDER BY run_id DESC LIMIT 1",
                           (config.MODELO_NBA,)).fetchone()
     backtest = {**json.loads(corrida[0]), "fecha": corrida[1][:10]} if corrida else None
@@ -182,7 +185,8 @@ def datos(con, fecha: str) -> dict:
         "jugadores": jugadores, "lesiones": lista_lesiones, "props": lineas, "con_precio": props_nba.hay_precio(tabla),
         "backtest": backtest,
         "resultados": resultados.ultimas_metricas(con),
-        "parleys": combinadas.armar(jugadores),
+        "parleys": parleys,
+        "parleys_resultados": combinadas.calificar(con),
     }
 
 

@@ -150,7 +150,7 @@ def evaluar_ausencias(df: pd.DataFrame, ks: dict) -> dict:
             for c in COMBOS:
                 mu = d[f"mu_{c[0]}_{c[1]}_{s}"]
                 m[s][f"{c[0]}_{c[1]}"] = {"mae": round(float((d[s] - mu).abs().mean()), 3),
-                                          "brier": round(brier(modelo.p_over(mu, modelo.k_para(ks[temporada][s], d.min_proy.to_numpy()), linea), sobre), 4)}
+                                          "brier": round(brier(modelo.p_over(mu, modelo.k_para(ks[temporada][s], d[f"min_{c[0]}"].to_numpy()), linea), sobre), 4)}
         salida[temporada] = m
     return salida
 
