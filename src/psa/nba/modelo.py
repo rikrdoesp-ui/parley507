@@ -74,6 +74,33 @@ def ajustar_k(mu: np.ndarray, y: np.ndarray) -> float:
     return float(np.clip(np.sum(mu ** 2) / exceso, 0.5, 200.0))
 
 
+# La dispersión cambia mucho con los minutos: un suplente es mucho más impredecible que un titular (en puntos,
+# k ~1 con menos de 15 min y ~12 con más de 32). Una sola k deja rangos cortos para suplentes y largos para titulares.
+BORDES_MINUTOS = [0, 12, 18, 24, 30, 36, 60]
+
+
+def ajustar_k_tramos(minutos, mu, y) -> list[float]:
+    """k por tramo de minutos proyectados; un tramo sin datos toma la k de todos."""
+    minutos, mu, y = (np.asarray(v, dtype=float) for v in (minutos, mu, y))
+    general = ajustar_k(mu, y)
+    tramo = _tramo(minutos)
+    return [round(ajustar_k(mu[tramo == i], y[tramo == i]), 3) if (tramo == i).sum() >= 50 else round(general, 3)
+            for i in range(len(BORDES_MINUTOS) - 1)]
+
+
+def _tramo(minutos):
+    return np.clip(np.searchsorted(BORDES_MINUTOS[1:-1], np.asarray(minutos, dtype=float), side="left"),
+                   0, len(BORDES_MINUTOS) - 2)
+
+
+def k_para(k, minutos):
+    """k de los minutos proyectados. `k` puede ser un número (modelos viejos) o la lista por tramo."""
+    if np.isscalar(k):
+        return np.full(np.shape(minutos), float(k)) if np.ndim(minutos) else float(k)
+    k = np.asarray(k, dtype=float)
+    return k[_tramo(minutos)] if np.ndim(minutos) else float(k[_tramo(minutos)])
+
+
 def _p(mu, k):
     return k / (k + np.asarray(mu, dtype=float))
 

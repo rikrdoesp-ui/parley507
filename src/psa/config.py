@@ -10,7 +10,7 @@ STAKE = Path(os.environ.get("PARLEY_DATOS", Path.home() / "OneDrive" / "Desktop"
 
 PANAMA = timezone(timedelta(hours=-5), "Panamá")  # Panamá no usa horario de verano.
 PAUSA_API = 0.7  # Segundos entre llamadas a stats.nba.com.
-MODELO_NBA = "nba-min-tasa-nb-0.2"  # 0.2: agrega PRA, PR y RA (fuerza un backtest nuevo).
+MODELO_NBA = "nba-min-tasa-nb-0.3"  # 0.2: PRA, PR y RA; 0.3: dispersión por minutos y sesgo de la temporada.
 # Las combinadas usan las mismas claves que /parley (pra, pr, ra).
 MERCADOS_NBA = {"puntos": "points", "rebotes": "rebounds", "asistencias": "assists", "pra": "pra", "pr": "pr", "ra": "ra"}
 

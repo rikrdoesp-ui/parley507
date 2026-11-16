@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.1.18 — 2026-11-15
+
+Mejoras tras revisar los resultados del 15-11 y confirmarlas en el backtest (30 mil partidos de 2025-26 y 2026-27):
+- Dispersión según minutos proyectados (6 tramos). Con una sola k, un suplente parecía tan predecible como un
+  titular: los rangos 10-90 atrapaban 63 % en suplentes y 88 % en titulares. Ahora la cobertura queda cerca de 80 %
+  (puntos 2026-27: 73 % a 80 %) y mejora la probabilidad en líneas bajas como AST over 0.5 (Brier 0,220 a 0,214).
+- Sesgo aprendido con todos los partidos de la temporada, no solo con las proyecciones guardadas de la app. En
+  2026-27 el modelo proyectaba ~8 % de más; el factor (mitad del efecto a 1500 casos, tope ±10 %) bajó el error medio
+  en las dos temporadas (puntos 4,84 a 4,76; PRA 6,41 a 6,30). Hoy: puntos ×0,937, rebotes ×0,961, asistencias ×0,945.
+- Probado y descartado: recortar minutos a titulares por paliza (en el historial pierden 1,5 min y 0,25 PRA más que
+  en un partido parejo; el 15-11 fue un día raro) y corregir por tramo de minutos (empeora el error medio).
+- Modelo nba-min-tasa-nb-0.3.
+
 ## v0.1.17 — 2026-11-15
 
 - Mercados combinados PRA (puntos+rebotes+asistencias), PR y RA. La media es la suma de las partes (con las bajas,

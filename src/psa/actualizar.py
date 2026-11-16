@@ -59,17 +59,13 @@ def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publi
             resumen["avisos"].append(f"No se leyó el reporte de lesiones ({error}). Ingresa los estados a mano.")
         con.commit()
 
-        paso(65, "Calificando proyecciones con los resultados...")
-        r = resultados.actualizar(con)
-        if r:
-            resumen["resultados"] = {s: v["factor"] for s, v in r["por_stat"].items()}
         ultimo = con.execute("SELECT MAX(created_at) FROM model_runs WHERE model_version = ?",
                              (config.MODELO_NBA,)).fetchone()[0]
         if not ultimo or ultimo[:10] <= (date.fromisoformat(fecha) - timedelta(days=DIAS_REAJUSTE)).isoformat():
-            paso(70, "Reajuste semanal del modelo (backtest)...")
+            paso(65, "Reajuste semanal del modelo (backtest)...")
             backtest.correr(con)
 
-        paso(85, "Proyecciones del día...")
+        paso(85, "Proyecciones del día y resultados...")
         recalcular(con, fecha, resumen)
         paso(95, "Página para el celular...")
         publicar_pagina(con, fecha, resumen, publicar)
@@ -93,6 +89,8 @@ def recalcular(con, fecha: str, resumen: dict | None = None) -> dict:
         resumen["avisos"].append(f"No hay partidos NBA el {fecha}.")
         return resumen
     resumen["proyecciones"] = proyeccion.guardar(con, df)
+    resumen["sesgo"] = df.attrs.get("factores", {})
+    resultados.actualizar(con, resumen["sesgo"])  # Califica lo ya jugado y guarda la corrección usada.
     plantilla = df[["player_id", "jugador", "equipo"]].drop_duplicates()
     resumen["lineas_parley"], avisos = parley_io.cargar_referencias(con, fecha, plantilla)
     resumen["avisos"] += avisos

@@ -485,7 +485,7 @@ const vistas = {
           el('td', {}, num(v.brier_modelo, 3)), el('td', {}, num(v.brier_acierto_l10, 3)), el('td', {}, num(v.mae_modelo, 2)), el('td', {}, pct(v.cobertura_10_90)))))));
     const r = D.resultados;
     if (r) out.splice(1, 0, el('section', {class: 'temporada'}, el('h2', {}, 'Corrección por resultados'),
-      el('p', {class: 'nota'}, `Con ${r.dias} días ya jugados (${r.desde} a ${r.hasta}). Sesgo es lo real menos lo proyectado; el factor es la corrección que ya se aplica a las proyecciones nuevas (1.000 = sin cambio). El rango 10-90 debería atrapar cerca del 80 %.`),
+      el('p', {class: 'nota'}, `Casos, sesgo, error y rango: proyecciones guardadas de ${r.dias} días (${r.desde} a ${r.hasta}). Sesgo es lo real menos lo proyectado. El factor sale de todos los partidos de la temporada y ya se aplica a las proyecciones nuevas (1.000 = sin cambio; PRA, PR y RA usan el de sus partes). El rango 10-90 debería atrapar cerca del 80 %.`),
       el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Casos'), el('th', {}, 'Sesgo'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90'), el('th', {}, 'Factor')),
         ...Object.entries(r.por_stat).map(([s, v]) => el('tr', {}, el('td', {}, ESTADISTICAS[s] || s), el('td', {}, String(v.n)),
           el('td', {}, num(v.sesgo, 2)), el('td', {}, num(v.mae, 2)), el('td', {}, pct(v.cobertura_10_90)), el('td', {}, num(v.factor, 3)))))));

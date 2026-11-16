@@ -4,9 +4,11 @@ Cada actualización:
 - toma la última proyección base de cada jugador y mercado hecha antes del partido (o la primera, si todas son de
   después), y la compara con el box score;
 - con las líneas guardadas (Stake o consenso) mira si acertó el lado más probable y compara su Brier con el mercado;
-- calcula, por estadística, cuánto se queda corto o se pasa el modelo (real / proyectado) y guarda un factor de
-  corrección que las proyecciones siguientes aplican a la media. El factor se encoge hacia 1 con poca muestra y no pasa
-  de ±10 %, para que unos pocos días raros no lo descontrolen.
+- guarda esas métricas junto con el factor de sesgo que usaron las proyecciones del día.
+
+El factor de sesgo (`factores_temporada`) se calcula con todos los partidos ya jugados de la temporada: real contra lo
+que el modelo habría proyectado antes de cada partido. Se encoge hacia 1 con poca muestra y no pasa de ±10 %. En el
+backtest bajó el error medio en las dos temporadas probadas (puntos 2026-27: 4,84 a 4,76).
 """
 import json
 
@@ -30,16 +32,13 @@ def factor_sesgo(real: float, proyectado: float, n: int) -> float:
     return float(1 + np.clip(crudo * n / (n + MUESTRA_CONFIANZA), -TOPE_FACTOR, TOPE_FACTOR))
 
 
-def historial_factores(con) -> pd.DataFrame:
-    filas = con.execute("SELECT created_at, params_json FROM model_runs WHERE model_version = ? ORDER BY created_at",
-                        (VERSION,)).fetchall()
-    return pd.DataFrame([{"desde": c, **json.loads(p)["factores"]} for c, p in filas])
-
-
-def factores_vigentes(con) -> dict:
-    """{estadística: factor} de la última calificación; sin calificaciones, 1."""
-    h = historial_factores(con)
-    return {s: float(h[s].iloc[-1]) if not h.empty and s in h else 1.0 for s in modelo.ESTADISTICAS}
+def factores_temporada(df: pd.DataFrame) -> dict:
+    """{estadística: factor} con las filas ya jugadas de la temporada (proyección previa y valor real)."""
+    salida = {}
+    for s in modelo.ESTADISTICAS:
+        g = df.dropna(subset=[f"mu_{s}", s])
+        salida[s] = round(factor_sesgo(g[s].sum(), g[f"mu_{s}"].sum(), len(g)), 4)
+    return salida
 
 
 def calificar(con) -> pd.DataFrame:
@@ -65,16 +64,6 @@ def calificar(con) -> pd.DataFrame:
     pred["stat"] = pred.market.map(config.MERCADOS_NBA)
     pred["real"] = [getattr(r, r.stat) for r in pred.itertuples()]
 
-    # Media sin la corrección que estaba vigente al proyectar, para que el factor no se aplique dos veces.
-    h = historial_factores(con)
-    pred["factor"] = 1.0
-    for r in h.itertuples():
-        posterior = pred.generated_at >= r.desde
-        if posterior.any():
-            pred.loc[posterior, "factor"] = pred.loc[posterior, "stat"].map(
-                lambda s, r=r: float(getattr(r, s, 1.0))).astype(float)
-    pred["crudo"] = pred.projected_mean / pred.factor
-
     lineas = pd.read_sql("""SELECT game_date, player_id, market, line, over_odds, under_odds, bookmaker, captured_at
                             FROM player_props WHERE player_id IS NOT NULL""", con)
     lineas = lineas.sort_values("captured_at").groupby(["game_date", "player_id", "market", "line"]).tail(1)
@@ -92,20 +81,18 @@ def calificar(con) -> pd.DataFrame:
     return df
 
 
-def resumir(df: pd.DataFrame) -> tuple[dict, dict]:
-    """(factores nuevos, métricas para la página)."""
+def resumir(df: pd.DataFrame, factores: dict) -> dict:
+    """Métricas para la página; `factores` es la corrección que usaron las proyecciones del día."""
     unico = df.drop_duplicates(["game_id", "player_id", "market"])
-    factores, por_stat = {}, {}
+    por_stat = {}
     for s in modelo.TODAS:
         g = unico[unico.stat == s]
-        if s in modelo.ESTADISTICAS:  # Las combinadas heredan la corrección de sus partes.
-            factores[s] = round(factor_sesgo(g.real.sum(), g.crudo.sum(), len(g)), 4)
         por_stat[s] = {"n": int(len(g)),
                        "sesgo": round(float(g.real.mean() - g.projected_mean.mean()), 3) if len(g) else None,
                        "mae": round(float((g.real - g.projected_mean).abs().mean()), 3) if len(g) else None,
                        "cobertura_10_90": round(float(g.real.between(g.lower_interval, g.upper_interval).mean()), 3)
                        if len(g) else None,
-                       "factor": factores.get(s)}
+                       "factor": factores.get(s)}  # Las combinadas heredan la de sus partes.
     legs = df.dropna(subset=["acierto"])
     con_mercado = legs.dropna(subset=["p_mercado"])
     lineas = {"n": int(len(legs)),
@@ -122,16 +109,16 @@ def resumir(df: pd.DataFrame) -> tuple[dict, dict]:
                           "partido": r.partido or ""}
                          for r in ultimos.itertuples()]
     dias = sorted(df.game_date.unique())
-    return factores, {"por_stat": por_stat, "lineas": lineas, "dias": len(dias),
+    return {"por_stat": por_stat, "lineas": lineas, "dias": len(dias),
                       "desde": dias[0] if dias else None, "hasta": dias[-1] if dias else None}
 
 
-def actualizar(con) -> dict:
-    """Califica todo lo jugado, guarda el factor de corrección nuevo y devuelve las métricas."""
+def actualizar(con, factores: dict) -> dict:
+    """Califica todo lo jugado y guarda las métricas con el factor de sesgo que usaron las proyecciones."""
     df = calificar(con)
     if df.empty:
         return {}
-    factores, metricas = resumir(df)
+    metricas = resumir(df, factores)
     con.execute("INSERT INTO model_runs(sport, model_version, training_cutoff, params_json, metrics_json, created_at)"
                 " VALUES ('NBA', ?, ?, ?, ?, ?)",
                 (VERSION, metricas["hasta"], json.dumps({"factores": factores}), json.dumps(metricas), db.ahora_utc()))

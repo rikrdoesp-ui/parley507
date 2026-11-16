@@ -35,7 +35,8 @@ def evaluar_temporada(df: pd.DataFrame, temporada: str) -> tuple[dict, dict, pd.
         p = prueba.dropna(subset=[f"mu_{stat}", f"l10_{stat}"])
         if e.empty or p.empty:
             continue
-        k = ks[stat] = modelo.ajustar_k(e[f"mu_{stat}"].to_numpy(), e[stat].to_numpy())
+        ks[stat] = modelo.ajustar_k_tramos(e.min_proy, e[f"mu_{stat}"], e[stat])
+        k = modelo.k_para(ks[stat], p.min_proy.to_numpy())
         y, mu = p[stat].to_numpy(), p[f"mu_{stat}"].to_numpy()
         linea = np.floor(p[f"l10_{stat}"].to_numpy()) + 0.5
         sobre = (y > linea).astype(float)
@@ -44,7 +45,7 @@ def evaluar_temporada(df: pd.DataFrame, temporada: str) -> tuple[dict, dict, pd.
         # Un partido que no existe (menos de 10 previos) no cuenta como "no superó la línea".
         p_l10 = np.nanmean(np.where(np.isnan(lags), np.nan, lags > linea[:, None]), axis=1)
         bajo, alto = modelo.intervalo(mu, k)
-        metricas[stat] = {"n": int(len(p)), "k": round(k, 2),
+        metricas[stat] = {"n": int(len(p)), "k": ks[stat],
                           "mae_modelo": round(float(np.mean(np.abs(y - mu))), 3),
                           "mae_l10": round(float(np.mean(np.abs(y - p[f"l10_{stat}"]))), 3),
                           "brier_modelo": round(brier(p_modelo, sobre), 4),
@@ -77,7 +78,7 @@ def legs_con_modelo(df: pd.DataFrame, con, ks_por_temporada: dict, k_final: dict
         if not cand.empty and (pd.Timestamp(cand.game_date.iloc[0]) - pd.Timestamp(leg.fecha)).days <= 1:
             mu = cand[f"mu_{stat}"].iloc[0]
             # k ajustada solo con temporadas anteriores a la del leg (sin datos posteriores).
-            k = ks_por_temporada.get(cand.season.iloc[0], {}).get(stat, k_final[stat])
+            k = modelo.k_para(ks_por_temporada.get(cand.season.iloc[0], {}).get(stat, k_final[stat]), cand.min_proy.iloc[0])
             if pd.notna(mu):
                 p = float(modelo.p_over(mu, k, leg.linea))
                 p_app = p if leg.lado == "over" else float(modelo.p_under(mu, k, leg.linea))
@@ -118,7 +119,7 @@ def filas_con_ausencias(df: pd.DataFrame) -> pd.DataFrame:
                 aus = {p: (ultimo[p][1], ultimo[p][2]) for p in ausentes}
                 ajustes = {c: modelo.ajustar_ausencias(pres, aus, c[1], c[0]) for c in COMBOS}
                 for r in validos.itertuples():
-                    fila = {"season": r.season, "minutes": r.minutes,
+                    fila = {"season": r.season, "minutes": r.minutes, "min_proy": r.min_proy,
                             **{f"min_{f}": ajustes[(f, 0.0)][0][r.player_id] for f, a in COMBOS if a == 0.0}}
                     for s in modelo.ESTADISTICAS:
                         fila.update({s: getattr(r, s), f"l10_{s}": getattr(r, f"l10_{s}"), f"mu_base_{s}": getattr(r, f"mu_{s}")})
@@ -149,7 +150,7 @@ def evaluar_ausencias(df: pd.DataFrame, ks: dict) -> dict:
             for c in COMBOS:
                 mu = d[f"mu_{c[0]}_{c[1]}_{s}"]
                 m[s][f"{c[0]}_{c[1]}"] = {"mae": round(float((d[s] - mu).abs().mean()), 3),
-                                          "brier": round(brier(modelo.p_over(mu, ks[temporada][s], linea), sobre), 4)}
+                                          "brier": round(brier(modelo.p_over(mu, modelo.k_para(ks[temporada][s], d.min_proy.to_numpy()), linea), sobre), 4)}
         salida[temporada] = m
     return salida
 
@@ -171,8 +172,8 @@ def correr(con) -> dict:
         metricas[t] = m
         calibraciones.append(c)
     # La k que usan las proyecciones del día se ajusta con todo lo disponible.
-    k_final = {s: modelo.ajustar_k(d[f"mu_{s}"].to_numpy(), d[s].to_numpy())
-               for s in modelo.TODAS for d in [df.dropna(subset=[f"mu_{s}"])]}
+    k_final = {s: modelo.ajustar_k_tramos(d.min_proy, d[f"mu_{s}"], d[s])
+               for s in modelo.TODAS for d in [df.dropna(subset=[f"mu_{s}", s])]}
     ausencias = evaluar_ausencias(df, ks)
     fraccion, alfa = elegir_combo(ausencias)
     legs = legs_con_modelo(df, con, ks, k_final)
@@ -187,7 +188,7 @@ def correr(con) -> dict:
                   "comparables_brier_mercado": round(brier(comunes.p_mercado, comunes.acierto), 4) if len(comunes) else None,
                   "comparables_brier_parley": round(brier(comunes.p_final, comunes.acierto), 4) if len(comunes) else None,
                   "muestra_suficiente": bool(len(comunes) >= 100)}
-    resultado = {"metricas": metricas, "legs_reales": reales, "k_final": {s: round(v, 3) for s, v in k_final.items()},
+    resultado = {"metricas": metricas, "legs_reales": reales, "k_final": k_final,
                  "ausencias": ausencias, "fraccion_minutos": fraccion, "alfa_uso": alfa}
     con.execute("INSERT INTO model_runs(sport, model_version, training_cutoff, params_json, metrics_json, created_at)"
                 " VALUES ('NBA', ?, ?, ?, ?, ?)",

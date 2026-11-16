@@ -219,7 +219,7 @@ def test_factor_sesgo_se_encoge_con_poca_muestra_y_tiene_tope():
     assert resultados.factor_sesgo(200, 100, 10**7) == pytest.approx(1 + resultados.TOPE_FACTOR)
 
 
-def test_calificar_usa_la_proyeccion_previa_y_no_aplica_dos_veces_el_factor(tmp_path):
+def test_calificar_usa_la_proyeccion_previa_y_guarda_el_factor_usado(tmp_path):
     from psa.nba import resultados
     con = db.conectar(tmp_path / "t.sqlite")
     con.execute("INSERT INTO players VALUES (1, 'Ana Pérez', 'ana perez')")
@@ -227,12 +227,6 @@ def test_calificar_usa_la_proyeccion_previa_y_no_aplica_dos_veces_el_factor(tmp_
                 "VALUES ('g1', '2026-27', 'Regular', '2026-11-14', '2026-11-15T00:00:00+00:00')")
     con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, "
                 "rebounds, assists, source_id) VALUES ('g1', 1, 9, '2026-27', '2026-11-14', 30, 25, 5, 4, 0)")
-    # Corrección de 1.1 en puntos vigente desde antes de la proyección previa.
-    con.execute("INSERT INTO model_runs(sport, model_version, params_json, created_at) VALUES ('NBA', ?, ?, ?)",
-                (resultados.VERSION, '{"factores": {"points": 1.1, "rebounds": 1, "assists": 1}}', "2026-11-13T00:00:00+00:00"))
-    # Corrección posterior a todas las proyecciones: no aplica a ninguna (antes rompía con la máscara vacía).
-    con.execute("INSERT INTO model_runs(sport, model_version, params_json, created_at) VALUES ('NBA', ?, ?, ?)",
-                (resultados.VERSION, '{"factores": {"points": 0.9, "rebounds": 1, "assists": 1}}', "2026-11-20T00:00:00+00:00"))
     for generado, media in (("2026-11-14T20:00:00+00:00", 22.0), ("2026-11-15T03:00:00+00:00", 99.0)):  # Antes / después.
         con.execute("INSERT INTO predictions(game_id, game_date, player_id, market, scenario, projected_mean, dispersion,"
                     " lower_interval, upper_interval, model_version, generated_at, data_cutoff) VALUES "
@@ -243,10 +237,31 @@ def test_calificar_usa_la_proyeccion_previa_y_no_aplica_dos_veces_el_factor(tmp_
     df = resultados.calificar(con)
     assert len(df) == 1
     fila = df.iloc[0]
-    assert fila.projected_mean == 22.0 and fila.crudo == pytest.approx(20.0)
+    assert fila.projected_mean == 22.0  # La de antes del partido, no la de después.
     assert fila.lado == "over" and fila.acierto == 1 and fila.p_mercado == pytest.approx(0.5)
-    factores, metricas = resultados.resumir(df)
-    assert factores["points"] > 1 and metricas["lineas"]["aciertos"] == 1
+    metricas = resultados.actualizar(con, {"points": 0.97, "rebounds": 1.0, "assists": 1.0})
+    assert metricas["lineas"]["aciertos"] == 1 and metricas["por_stat"]["points"]["factor"] == 0.97
+    assert resultados.ultimas_metricas(con)["por_stat"]["points"]["factor"] == 0.97
+
+
+def test_factores_temporada_corrige_con_lo_jugado():
+    from psa.nba import resultados
+    n = 20000
+    df = pd.DataFrame({"mu_points": [10.0] * n, "points": [9.0] * n, "mu_rebounds": [5.0] * n, "rebounds": [5.0] * n,
+                       "mu_assists": [3.0] * n, "assists": [np.nan] * n})
+    f = resultados.factores_temporada(df)
+    assert 0.9 < f["points"] < 0.95 and f["rebounds"] == 1.0 and f["assists"] == 1.0  # Sin datos reales: sin corrección.
+
+
+def test_k_por_minutos():
+    rng = np.random.default_rng(1)
+    minutos = np.r_[np.full(4000, 10.0), np.full(4000, 34.0)]
+    mu = np.r_[np.full(4000, 4.0), np.full(4000, 20.0)]
+    k_real = np.r_[np.full(4000, 1.0), np.full(4000, 12.0)]
+    y = rng.negative_binomial(k_real, k_real / (k_real + mu))
+    k = modelo.ajustar_k_tramos(minutos, mu, y)
+    assert modelo.k_para(k, 10.0) < 2 and modelo.k_para(k, 34.0) > 8  # Suplente más disperso que titular.
+    assert modelo.k_para(6.0, 20.0) == 6.0 and list(modelo.k_para(k, np.array([10.0, 34.0]))) == [k[0], k[4]]
 
 
 # --- Parleys por partido -------------------------------------------------------------

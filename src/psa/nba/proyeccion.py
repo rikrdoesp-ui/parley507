@@ -69,6 +69,9 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
     if not objetivos:
         return pd.DataFrame()
     df = modelo.con_proyeccion(pd.concat([hist.assign(objetivo=False), pd.DataFrame(objetivos)], ignore_index=True))
+    temporada = config.temporada_actual(date.fromisoformat(fecha))
+    jugados = df[df.objetivo.eq(False) & (df.season == temporada) & (df.minutes > 0)]
+    factores = resultados.factores_temporada(jugados)  # Sesgo de la temporada, aprendido de lo ya jugado.
     df = df[df.objetivo.eq(True)].merge(juegos, on="game_id")
     nombres = dict(con.execute("SELECT player_id, full_name FROM players"))
     df["jugador"] = df.player_id.map(nombres)
@@ -85,7 +88,6 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
     k, nota_k = k_vigente(con)
     spreads = spreads_estimados(con)
     fraccion, alfa = ajuste_ausencias_vigente(con)
-    factores = resultados.factores_vigentes(con)  # Corrección aprendida de los días ya jugados.
     filas = []
     for (_, equipo), g in df.groupby(["game_id", "team_id"]):
         ultimos = hist[hist.team_id == equipo].sort_values("game_date").game_id.drop_duplicates().tail(3)
@@ -138,10 +140,13 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                         mu = sum(fila[f"mu_{s}"] for s in modelo.COMBOS[stat])
                     else:
                         mu = medias.get(r.player_id, {}).get(stat, np.nan) * factores[stat]
-                    bajo, alto = modelo.intervalo(mu, k[stat]) if pd.notna(mu) else (np.nan, np.nan)
-                    fila.update({f"mu_{stat}": mu, f"k_{stat}": k[stat], f"p10_{stat}": bajo, f"p90_{stat}": alto})
+                    k_fila = modelo.k_para(k[stat], mins[r.player_id])
+                    bajo, alto = modelo.intervalo(mu, k_fila) if pd.notna(mu) else (np.nan, np.nan)
+                    fila.update({f"mu_{stat}": mu, f"k_{stat}": k_fila, f"p10_{stat}": bajo, f"p90_{stat}": alto})
                 filas.append(fila)
-    return pd.DataFrame(filas)
+    salida = pd.DataFrame(filas)
+    salida.attrs["factores"] = factores
+    return salida
 
 
 def guardar(con, df: pd.DataFrame) -> int:
