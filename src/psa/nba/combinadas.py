@@ -16,7 +16,7 @@ ACIERTOS_MINIMOS = 6
 MINUTOS_MINIMOS = 20
 MAX_POR_EQUIPO = 2
 TAMANOS = (2, 3)
-NOMBRES = {"pts": "puntos", "reb": "rebotes", "ast": "asistencias"}
+NOMBRES = {"pts": "puntos", "reb": "rebotes", "ast": "asistencias", "pra": "PRA", "pr": "PR", "ra": "RA"}
 
 
 def candidatos(jugadores: list[dict]) -> list[dict]:

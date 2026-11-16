@@ -30,7 +30,7 @@ def evaluar_temporada(df: pd.DataFrame, temporada: str) -> tuple[dict, dict, pd.
     entreno = df[(df.game_date < inicio)]
     prueba = df[df.season == temporada]
     ks, metricas, calibracion = {}, {}, []
-    for stat in modelo.ESTADISTICAS:
+    for stat in modelo.TODAS:
         e = entreno.dropna(subset=[f"mu_{stat}", f"l10_{stat}"])
         p = prueba.dropna(subset=[f"mu_{stat}", f"l10_{stat}"])
         if e.empty or p.empty:
@@ -172,7 +172,7 @@ def correr(con) -> dict:
         calibraciones.append(c)
     # La k que usan las proyecciones del día se ajusta con todo lo disponible.
     k_final = {s: modelo.ajustar_k(d[f"mu_{s}"].to_numpy(), d[s].to_numpy())
-               for s in modelo.ESTADISTICAS for d in [df.dropna(subset=[f"mu_{s}"])]}
+               for s in modelo.TODAS for d in [df.dropna(subset=[f"mu_{s}"])]}
     ausencias = evaluar_ausencias(df, ks)
     fraccion, alfa = elegir_combo(ausencias)
     legs = legs_con_modelo(df, con, ks, k_final)

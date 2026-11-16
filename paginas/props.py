@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from psa import db, odds, ui
+from psa import config, db, odds, ui
 from psa.nba import proyeccion
 from psa.nba import props as props_nba
 
@@ -23,7 +23,7 @@ with st.expander("Ingresar una línea a mano (la que ves en Stake)"):
     with st.form("linea"):
         c1, c2, c3 = st.columns(3)
         pid = c1.selectbox("Jugador", list(opciones), format_func=opciones.get)
-        mercado = c2.selectbox("Mercado", ["puntos", "rebotes", "asistencias"])
+        mercado = c2.selectbox("Mercado", list(config.MERCADOS_NBA))
         linea = c3.number_input("Línea", 0.0, 80.0, 10.5, 0.5)
         c4, c5, c6 = st.columns(3)
         sobre = c4.text_input("Cuota Over (decimal o americana)")

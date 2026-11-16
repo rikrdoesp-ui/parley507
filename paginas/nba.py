@@ -1,7 +1,7 @@
 import pandas as pd
 import streamlit as st
 
-from psa import db, ui
+from psa import config, db, ui
 from psa.nba import lesiones, proyeccion
 
 st.title("NBA: proyecciones por partido")
@@ -30,7 +30,7 @@ estado_por_clave = dict(zip(estados.clave, estados.status)) if not estados.empty
 
 vista = del_juego[del_juego.scenario == escenario].copy()
 vista["estado"] = vista.jugador.map(lambda n: estado_por_clave.get(db.clave_nombre(n), ""))
-for mercado in ("puntos", "rebotes", "asistencias"):
+for mercado in config.MERCADOS_NBA:
     vista[mercado] = [f"{m:.1f} ({lo:.0f}-{hi:.0f})" if pd.notna(m) else "sin muestra" for m, lo, hi in
                       zip(vista[f"projected_mean_{mercado}"], vista[f"lower_interval_{mercado}"],
                           vista[f"upper_interval_{mercado}"])]
@@ -38,7 +38,7 @@ st.caption("Media proyectada (intervalo 10-90 %). Minutos: media ponderada recie
 for equipo, g in vista.groupby("equipo"):
     st.subheader(equipo)
     st.dataframe(g.sort_values("minutes", ascending=False)[
-        ["jugador", "estado", "minutes", "minutes_sd", "sample_games", "puntos", "rebotes", "asistencias", "notes"]]
+        ["jugador", "estado", "minutes", "minutes_sd", "sample_games", *config.MERCADOS_NBA, "notes"]]
         .rename(columns={"minutes": "minutos", "minutes_sd": "desv. min L10", "sample_games": "partidos", "notes": "notas"}),
         hide_index=True, width="stretch", column_config={"minutos": st.column_config.NumberColumn(format="%.1f"),
                                                           "desv. min L10": st.column_config.NumberColumn(format="%.1f")})

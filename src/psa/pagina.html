@@ -202,8 +202,10 @@ const pct = (x, d = 0) => vacio(x) ? '—' : (x * 100).toFixed(d) + ' %';
 const num = (x, d = 1) => vacio(x) ? '—' : Number(x).toFixed(d);
 const ve = x => vacio(x) ? '—' : `${x > 0 ? '+' : '−'}${Math.abs(x * 100).toFixed(1)} %`;
 const signo = x => vacio(x) ? '' : x > 0 ? 'pos' : 'neg';
-const ESTADISTICAS = {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'};
-const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asistencias', puntos: 'Puntos', rebotes: 'Rebotes', asistencias: 'Asistencias'};
+const ESTADISTICAS = {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias', pra: 'PRA', pr: 'PR', ra: 'RA'};
+const MERCADOS = ['pts', 'reb', 'ast', 'pra', 'pr', 'ra'];
+const NOMBRES = {pts: 'Puntos', reb: 'Rebotes', ast: 'Asistencias', puntos: 'Puntos', rebotes: 'Rebotes', asistencias: 'Asistencias',
+  pra: 'PRA', pr: 'PR', ra: 'RA'};
 const cruce = nombre => { const [a, b] = nombre.split(' @ '); return el('span', {class: 'cruce'}, a, el('span', {class: 'arroba'}, '@'), b || ''); };
 
 // Estado del día.
@@ -268,9 +270,9 @@ function filaProp({jugador, lado, linea, prob, mercado, cuota, valor, media, min
 }
 const avisos = texto => (texto || '').split('; ').filter(n => n && !n.startsWith('dispersión') && !n.startsWith('ajuste por'));
 
-// Ficha de jugador con sus tres props.
+// Ficha de jugador con sus props.
 function fichaJugador(j) {
-  const filas = ['pts', 'reb', 'ast'].map(k => {
+  const filas = MERCADOS.filter(k => j.props[k]).map(k => {
     const p = j.props[k] || {};
     return el('tr', {}, el('td', {}, NOMBRES[k]), el('td', {}, num(p.l5)), el('td', {}, num(p.l10)), el('td', {}, num(p.temp)),
       el('td', {class: 'proy'}, num(p.media)),
@@ -296,7 +298,7 @@ function fichaJugador(j) {
 // jugadores con 20 minutos o más (para no premiar unders fáciles de suplentes).
 function mejoresProps(jugadores) {
   const todas = [];
-  for (const j of jugadores) for (const k of ['pts', 'reb', 'ast']) {
+  for (const j of jugadores) for (const k of MERCADOS) {
     const p = j.props[k];
     if (!p || !p.lado || j.notas.includes('muestra insuficiente')) continue;
     if (p.tipo === 'ref' && (j.min || 0) < 20) continue;
@@ -320,7 +322,7 @@ function vistaJuego(nombre) {
   if (!mejores.length) out.push(el('p', {class: 'suave'}, 'Ninguna prop destaca en este partido.'));
   for (const {j, k, p: q} of mejores) out.push(filaProp({jugador: j.j, lado: q.lado, linea: q.linea, prob: q.p_lado,
     mercado: q.p_mercado, cuota: q.tipo === 'real' && !String(q.casa).startsWith('Consenso') ? q.cuota : null, valor: q.ve,
-    media: q.media, minutos: j.min, etiqueta: NOMBRES[k].toLowerCase() + (q.tipo === 'ref' ? '*' : ''),
+    media: q.media, minutos: j.min, etiqueta: (['pra', 'pr', 'ra'].includes(k) ? NOMBRES[k] : NOMBRES[k].toLowerCase()) + (q.tipo === 'ref' ? '*' : ''),
     notas: [['Out', 'Doubtful', 'Questionable'].includes(j.est) ? j.est : '', j.sd > 6 ? 'minutos inestables' : '',
       j.notas.includes('riesgo de paliza') ? 'riesgo de paliza' : ''].filter(Boolean).join(', ')}));
   out.push(el('p', {class: 'nota'}, 'Con línea real, la probabilidad parte del mercado sin margen (la marca fina de la barra) y el modelo la mueve como mucho 4 puntos, porque todavía no le gana al mercado. VE es esa probabilidad por la cuota, menos 1. Con * la línea es de referencia (media de los últimos 10, sin cuota): solo indica hacia dónde se inclina el modelo. BET o PASS lo decide /parley.'));
@@ -439,7 +441,7 @@ const vistas = {
   Resultados() {
     const r = D.resultados, ln = r && r.lineas;
     if (!ln || !ln.n) return [el('p', {class: 'vacio'}, 'Aún no termina ningún partido con línea. Los resultados aparecen solos al terminar.')];
-    const CORTO = {puntos: 'PTS', rebotes: 'REB', asistencias: 'AST'};
+    const CORTO = {puntos: 'PTS', rebotes: 'REB', asistencias: 'AST', pra: 'PRA', pr: 'PR', ra: 'RA'};
     const tabla = (legs, conPartido) => el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
       ...[...legs].sort((a, b) => b.p - a.p).map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, conPartido ? `${x.partido}, ${x.f.slice(8)}/${x.f.slice(5, 7)}` : '')),
         el('td', {}, `${CORTO[x.m] || x.m} ${x.lado} ${x.l}`), el('td', {}, pct(x.p)),
@@ -479,7 +481,7 @@ const vistas = {
     const out = [el('p', {class: 'nota'}, `${D.modelo}, backtest del ${b.fecha} con datos hasta ${D.corte || '—'}. En el Brier, menor es mejor; L10 es acertar con el promedio de los últimos 10.`)];
     for (const [temp, m] of Object.entries(b.metricas)) out.push(el('section', {class: 'temporada'}, el('h2', {}, `Temporada ${temp}`),
       el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'Brier modelo'), el('th', {}, 'Brier L10'), el('th', {}, 'Error medio'), el('th', {}, 'Rango 10-90')),
-        ...Object.entries(m).map(([s, v]) => el('tr', {}, el('td', {}, {points: 'Puntos', rebounds: 'Rebotes', assists: 'Asistencias'}[s] || s),
+        ...Object.entries(m).map(([s, v]) => el('tr', {}, el('td', {}, ESTADISTICAS[s] || s),
           el('td', {}, num(v.brier_modelo, 3)), el('td', {}, num(v.brier_acierto_l10, 3)), el('td', {}, num(v.mae_modelo, 2)), el('td', {}, pct(v.cobertura_10_90)))))));
     const r = D.resultados;
     if (r) out.splice(1, 0, el('section', {class: 'temporada'}, el('h2', {}, 'Corrección por resultados'),

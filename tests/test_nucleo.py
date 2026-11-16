@@ -271,3 +271,14 @@ def test_parley_filtra_y_elige_los_mas_probables():
     assert parleys[0]["prob"] == pytest.approx(0.70 * 0.68, abs=1e-3)
     assert parleys[0]["cuota_justa"] == pytest.approx(1 / (0.70 * 0.68), abs=0.01)
     assert "7 de sus últimos 10" in parleys[0]["legs"][0]["por_que"]
+
+
+def test_combinadas_suman_sus_partes_y_lo_real():
+    filas = [{"player_id": 1, "game_id": f"g{i}", "game_date": f"2026-11-{i + 1:02d}", "minutes": 30.0,
+              "points": 20 + i % 3, "rebounds": 5 + i % 2, "assists": 4} for i in range(8)]
+    df = modelo.con_proyeccion(pd.DataFrame(filas))
+    ultima = df.iloc[-1]
+    assert ultima.mu_pra == pytest.approx(ultima.mu_points + ultima.mu_rebounds + ultima.mu_assists)
+    assert ultima.mu_ra == pytest.approx(ultima.mu_rebounds + ultima.mu_assists)
+    assert ultima.pr == ultima.points + ultima.rebounds
+    assert set(modelo.COMBOS) <= set(modelo.K_DEFECTO)

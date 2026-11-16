@@ -13,8 +13,8 @@ MINUTOS_INESTABLES = 6.0  # Desviación de minutos (L10) a partir de la cual se 
 
 
 def historial(con) -> pd.DataFrame:
-    return pd.read_sql("""SELECT game_id, player_id, team_id, season, game_date, minutes, points, rebounds, assists
-                          FROM nba_player_game_stats""", con)
+    return modelo.agregar_combos(pd.read_sql("""SELECT game_id, player_id, team_id, season, game_date, minutes, points,
+                                                rebounds, assists FROM nba_player_game_stats""", con))
 
 
 def k_vigente(con) -> tuple[dict, str]:
@@ -22,7 +22,7 @@ def k_vigente(con) -> tuple[dict, str]:
                        (config.MODELO_NBA,)).fetchone()
     if not fila:
         return dict(modelo.K_DEFECTO), "dispersión por defecto: falta correr el backtest"
-    return json.loads(fila[0])["k"], f"dispersión ajustada en el backtest del {fila[1][:10]}"
+    return {**modelo.K_DEFECTO, **json.loads(fila[0])["k"]}, f"dispersión ajustada en el backtest del {fila[1][:10]}"
 
 
 def ajuste_ausencias_vigente(con) -> tuple[float, float]:
@@ -133,8 +133,11 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                         "team_id": r.team_id, "equipo": r.equipo, "player_id": int(r.player_id), "jugador": r.jugador,
                         "estado": r.estado, "escenario": nombre, "minutos": mins[r.player_id], "min_sd": r.min_sd,
                         "n_previos": int(r.n_previos), "data_cutoff": corte, "notas": "; ".join(notas), "spread": spread}
-                for stat in modelo.ESTADISTICAS:
-                    mu = medias.get(r.player_id, {}).get(stat, np.nan) * factores[stat]
+                for stat in modelo.TODAS:
+                    if stat in modelo.COMBOS:  # Suma de las partes ya corregidas.
+                        mu = sum(fila[f"mu_{s}"] for s in modelo.COMBOS[stat])
+                    else:
+                        mu = medias.get(r.player_id, {}).get(stat, np.nan) * factores[stat]
                     bajo, alto = modelo.intervalo(mu, k[stat]) if pd.notna(mu) else (np.nan, np.nan)
                     fila.update({f"mu_{stat}": mu, f"k_{stat}": k[stat], f"p10_{stat}": bajo, f"p90_{stat}": alto})
                 filas.append(fila)

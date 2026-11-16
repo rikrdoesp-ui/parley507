@@ -13,16 +13,26 @@ import pandas as pd
 from scipy.stats import nbinom
 
 ESTADISTICAS = ["points", "rebounds", "assists"]
+# Combinadas: la media es la suma de las partes (con los mismos ajustes); la dispersión se ajusta aparte.
+COMBOS = {"pra": ["points", "rebounds", "assists"], "pr": ["points", "rebounds"], "ra": ["rebounds", "assists"]}
+TODAS = ESTADISTICAS + list(COMBOS)
 VIDA_MINUTOS = 4
 VIDA_TASA = 12
 MUESTRA_MINIMA = 5
-K_DEFECTO = {"points": 8.0, "rebounds": 6.0, "assists": 4.0}  # Solo si nunca se corrió el ajuste.
+K_DEFECTO = {"points": 8.0, "rebounds": 6.0, "assists": 4.0, "pra": 10.0, "pr": 10.0, "ra": 7.0}  # Solo si nunca se corrió el ajuste.
 TOPE_MINUTOS = 40.0
 GANANCIA_MAXIMA = 8.0  # Minutos extra máximos por jugador cuando falta un compañero.
 
 
 def _por_jugador(serie: pd.Series, jugador: pd.Series, funcion) -> pd.Series:
     return serie.groupby(jugador, sort=False).transform(funcion)
+
+
+def agregar_combos(df: pd.DataFrame) -> pd.DataFrame:
+    """Columnas pra, pr y ra con lo real de cada partido (NaN si falta alguna parte)."""
+    for combo, partes in COMBOS.items():
+        df[combo] = df[partes].sum(axis=1, min_count=len(partes))
+    return df
 
 
 def con_proyeccion(df: pd.DataFrame) -> pd.DataFrame:
@@ -44,6 +54,11 @@ def con_proyeccion(df: pd.DataFrame) -> pd.DataFrame:
         num = _por_jugador(prev, jugador, lambda s: s.ewm(halflife=VIDA_TASA).mean())
         df[f"tasa_{stat}"] = (num / den).where(valido)
         df[f"mu_{stat}"] = (df["min_proy"] * df[f"tasa_{stat}"]).where(valido)
+    agregar_combos(df)  # Filas futuras: NaN.
+    for combo, partes in COMBOS.items():
+        df[f"mu_{combo}"] = sum(df[f"mu_{s}"] for s in partes)
+    for stat in TODAS:
+        prev = df.groupby("player_id", sort=False)[stat].shift()
         df[f"l10_{stat}"] = _por_jugador(prev, jugador, lambda s: s.rolling(10, min_periods=MUESTRA_MINIMA).mean())
         # Últimos 10 valores previos, para el acierto L10 a una línea (línea base del backtest).
         for i in range(1, 11):

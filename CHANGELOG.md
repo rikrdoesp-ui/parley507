@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.1.17 — 2026-11-15
+
+- Mercados combinados PRA (puntos+rebotes+asistencias), PR y RA. La media es la suma de las partes (con las bajas,
+  el uso y la corrección por resultados ya aplicados); la dispersión se ajusta aparte en el backtest. En el backtest
+  también le ganan al promedio L10 (PRA 2026-27: Brier 0,235 contra 0,251). Modelo nba-min-tasa-nb-0.2.
+- Salen en la ficha de cada jugador, en Props y en Parley cuando hay línea de Stake, en Resultados y en el export a
+  /parley (claves `pra`, `pr`, `ra`, las mismas que usa el skill). Sin línea de Stake se muestran con línea de
+  referencia (*).
+
 ## v0.1.16 — 2026-11-15
 
 - Resultados: se ven por partido (bloques plegables con "30 de 39" acertadas) o todas de mayor a menor

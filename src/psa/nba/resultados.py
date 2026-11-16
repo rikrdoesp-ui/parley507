@@ -46,7 +46,8 @@ def calificar(con) -> pd.DataFrame:
     """Una fila por jugador, partido y mercado ya jugado (con minutos), con la línea guardada si la hay."""
     pred = pd.read_sql("""SELECT p.game_id, p.game_date, p.player_id, p.market, p.projected_mean, p.dispersion,
                              p.lower_interval, p.upper_interval, p.generated_at, g.start_time_utc,
-                             s.minutes, s.points, s.rebounds, s.assists, pl.full_name AS jugador,
+                             s.minutes, s.points, s.rebounds, s.assists, s.points + s.rebounds + s.assists AS pra,
+                             s.points + s.rebounds AS pr, s.rebounds + s.assists AS ra, pl.full_name AS jugador,
                              a.abbreviation || ' @ ' || h.abbreviation AS partido
                            FROM predictions p JOIN games g USING(game_id)
                            LEFT JOIN teams h ON h.team_id = g.home_team_id LEFT JOIN teams a ON a.team_id = g.away_team_id
@@ -95,15 +96,16 @@ def resumir(df: pd.DataFrame) -> tuple[dict, dict]:
     """(factores nuevos, métricas para la página)."""
     unico = df.drop_duplicates(["game_id", "player_id", "market"])
     factores, por_stat = {}, {}
-    for s in modelo.ESTADISTICAS:
+    for s in modelo.TODAS:
         g = unico[unico.stat == s]
-        factores[s] = round(factor_sesgo(g.real.sum(), g.crudo.sum(), len(g)), 4)
+        if s in modelo.ESTADISTICAS:  # Las combinadas heredan la corrección de sus partes.
+            factores[s] = round(factor_sesgo(g.real.sum(), g.crudo.sum(), len(g)), 4)
         por_stat[s] = {"n": int(len(g)),
                        "sesgo": round(float(g.real.mean() - g.projected_mean.mean()), 3) if len(g) else None,
                        "mae": round(float((g.real - g.projected_mean).abs().mean()), 3) if len(g) else None,
                        "cobertura_10_90": round(float(g.real.between(g.lower_interval, g.upper_interval).mean()), 3)
                        if len(g) else None,
-                       "factor": factores[s]}
+                       "factor": factores.get(s)}
     legs = df.dropna(subset=["acierto"])
     con_mercado = legs.dropna(subset=["p_mercado"])
     lineas = {"n": int(len(legs)),

@@ -21,7 +21,7 @@ from .nba import props as props_nba
 
 RAIZ = Path(__file__).resolve().parents[2]
 DESTINO = RAIZ / "index.html"  # GitHub Pages publica desde la raíz de main.
-CORTOS = {"puntos": "pts", "rebotes": "reb", "asistencias": "ast"}
+CORTOS = {"puntos": "pts", "rebotes": "reb", "asistencias": "ast", "pra": "pra", "pr": "pr", "ra": "ra"}
 
 
 def version() -> str:
