@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.25 — 2026-11-16
+
+- Resultados: "Parleys sugeridos" muestra los de días ya jugados (por fecha) con el valor real de cada leg; los de
+  hoy quedan en la pestaña Parley hasta que terminen. Los propuestos con el partido ya empezado se marcan y se
+  cuentan aparte, no en el registro. Se cargaron los 10 del 15-11: ganaron 2 (SAS @ UTA, de 2 y de 3 legs); por su
+  probabilidad se esperaban 3,1.
+- Si el commit de la página falla (PC recién despierta), se reintenta una vez.
+
 ## v0.1.24 — 2026-11-15
 
 - Tocar la foto del jugador la abre en grande (1040x760 de la NBA) con su nombre y partido; se cierra con la X,

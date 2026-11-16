@@ -110,10 +110,13 @@ def _utc(texto: str) -> str:
 
 def calificar(con) -> dict:
     """Cada parley guardado con el resultado de sus legs (box score oficial). Push o jugador sin minutos = pendiente."""
-    filas = con.execute("""SELECT game_date, matchup, size, legs_json, prob, odds, fair_odds, ev FROM parley_proposals
+    filas = con.execute("""SELECT game_date, matchup, size, legs_json, prob, odds, fair_odds, ev, generated_at FROM parley_proposals
                            ORDER BY game_date DESC, matchup, size""").fetchall()
+    inicios = {(f, f"{a} @ {h}"): i for f, a, h, i in con.execute(
+        """SELECT g.game_date, a.abbreviation, h.abbreviation, g.start_time_utc FROM games g
+           JOIN teams h ON h.team_id = g.home_team_id JOIN teams a ON a.team_id = g.away_team_id""")}
     salida = []
-    for fecha, partido, tam, legs_json, prob, cuota, justa, ve in filas:
+    for fecha, partido, tam, legs_json, prob, cuota, justa, ve, generado in filas:
         legs = json.loads(legs_json)
         for l in legs:
             stat = config.MERCADOS_NBA[l["mercado"].lower()]
@@ -126,11 +129,16 @@ def calificar(con) -> dict:
                 l["real"] > l["linea"] if l["lado"] == "over" else l["real"] < l["linea"])
         estado = ("perdio" if any(l["ok"] is False for l in legs) else
                   "gano" if all(l["ok"] is True for l in legs) else "pendiente")
+        inicio = inicios.get((fecha, partido))
+        tarde = bool(inicio) and generado >= _utc(inicio)  # Propuesto con el partido empezado: no cuenta.
         salida.append({"f": fecha, "partido": partido, "tam": tam, "legs": legs, "prob": prob, "cuota": cuota,
-                       "justa": justa, "ve": ve, "estado": estado})
-    decididos = [p for p in salida if p["estado"] != "pendiente"]
+                       "justa": justa, "ve": ve, "estado": estado, "tarde": tarde})
+    decididos = [p for p in salida if p["estado"] != "pendiente" and not p["tarde"]]
+    tarde = [p for p in salida if p["estado"] != "pendiente" and p["tarde"]]
     return {"parleys": salida, "decididos": len(decididos), "ganados": sum(p["estado"] == "gano" for p in decididos),
-            "esperados": round(sum(p["prob"] for p in decididos), 2)}
+            "esperados": round(sum(p["prob"] for p in decididos), 2),
+            "tarde": {"decididos": len(tarde), "ganados": sum(p["estado"] == "gano" for p in tarde),
+                      "esperados": round(sum(p["prob"] for p in tarde), 2)}}
 
 
 def _partes(stat: str) -> list[str]:

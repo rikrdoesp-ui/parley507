@@ -187,6 +187,7 @@ td.gano{color:var(--over);font-weight:700}
 .selector button{flex:1;min-height:44px;font:600 16px/1 var(--cond);border-radius:10px;border:1px solid var(--regla);background:transparent;color:var(--suave);cursor:pointer}
 .selector button[aria-pressed=true]{background:var(--bloque);color:var(--tinta);border-color:var(--tinta)}
 .marcador-aciertos{font:700 18px/1 var(--cond)}
+h3.dia{font:600 18px/1 var(--cond);color:var(--suave);margin:16px 0 4px}
 .combinada{border-top:1px solid var(--regla);padding:10px 0 4px}
 .parley-cabeza{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:13.5px;margin-bottom:6px}
 .parley-cabeza .titulo{font:700 20px/1 var(--cond)}
@@ -511,17 +512,24 @@ const vistas = {
   Resultados() {
     const r = D.resultados, ln = r && r.lineas, pr = D.parleys_resultados;
     const ESTADO = {gano: 'Ganó', perdio: 'Perdió', pendiente: 'Pendiente'};
-    const secParleys = !pr || !pr.parleys.length ? [] : [el('h2', {class: 'seccion'}, 'Parleys propuestos'),
-      el('p', {class: 'nota'}, pr.decididos ? `Ganaron ${pr.ganados} de ${pr.decididos}. Por su probabilidad se esperaban ${num(pr.esperados, 1)}. Solo cuentan los propuestos antes del inicio del partido.`
-        : 'Todavía no termina ningún partido con parley propuesto. Solo cuentan los propuestos antes del inicio.'),
-      ...pr.parleys.map(x => el('div', {class: 'combinada'},
-        el('div', {class: 'parley-cabeza'}, cruce(x.partido), el('span', {class: 'titulo'}, `${x.tam} legs`),
-          el('span', {}, `${x.f.slice(8)}/${x.f.slice(5, 7)}, prob. ${pct(x.prob)}`),
-          el('span', {class: 'estado-parley ' + x.estado}, ESTADO[x.estado])),
-        ...x.legs.map(l => el('div', {class: 'leg ' + l.lado}, el('div', {class: 'leg-linea'}, el('strong', {}, l.j),
-          el('span', {}, `${l.mercado} ${l.lado} ${l.linea}`),
-          el('span', {class: 'leg-p ' + (l.ok === true ? 'gano' : l.ok === false ? 'perdio' : '')},
-            l.real === null || l.real === undefined ? '—' : `${l.real} ${l.ok ? '✓' : '✗'}`))))))];
+    // Solo días con partidos jugados: los de hoy están en la pestaña Parley hasta que terminen.
+    const lista = !pr ? [] : pr.parleys.filter(x => x.estado !== 'pendiente' || x.f < D.fecha);
+    const resumen = [];
+    if (pr && pr.decididos) resumen.push(`Propuestos antes del partido: ganaron ${pr.ganados} de ${pr.decididos}; por su probabilidad se esperaban ${num(pr.esperados, 1)}.`);
+    if (pr && pr.tarde && pr.tarde.decididos) resumen.push(`Propuestos con el partido ya empezado (no cuentan en el registro): ganaron ${pr.tarde.ganados} de ${pr.tarde.decididos}; se esperaban ${num(pr.tarde.esperados, 1)}.`);
+    const fechas = [...new Set(lista.map(x => x.f))];
+    const secParleys = !lista.length ? [] : [el('h2', {class: 'seccion'}, 'Parleys sugeridos'),
+      el('p', {class: 'nota'}, resumen.join(' ') || 'Todavía no termina ningún partido con parley sugerido.'),
+      ...fechas.map(f => el('section', {}, el('h3', {class: 'dia'}, `${f.slice(8)}/${f.slice(5, 7)}`),
+        el('div', {class: 'rejilla'}, ...lista.filter(x => x.f === f).map(x => el('div', {class: 'combinada'},
+          el('div', {class: 'parley-cabeza'}, cruce(x.partido), el('span', {class: 'titulo'}, `${x.tam} legs`),
+            el('span', {}, `prob. ${pct(x.prob)}, cuota ${num(x.cuota, 2)}`),
+            el('span', {class: 'estado-parley ' + x.estado}, ESTADO[x.estado])),
+          x.tarde ? el('div', {class: 'suave pequeno'}, 'Propuesto con el partido ya empezado') : '',
+          ...x.legs.map(l => el('div', {class: 'leg ' + l.lado}, el('div', {class: 'leg-linea'}, el('strong', {}, l.j),
+            el('span', {}, `${l.mercado} ${l.lado} ${l.linea}`),
+            el('span', {class: 'leg-p ' + (l.ok === true ? 'gano' : l.ok === false ? 'perdio' : '')},
+              l.real === null || l.real === undefined ? '—' : `${l.real} ${l.ok ? '✓' : '✗'}`)))))))))];
     if (!ln || !ln.n) return [...secParleys, el('p', {class: 'vacio'}, 'Aún no termina ningún partido con línea. Los resultados aparecen solos al terminar.')];
     const CORTO = {puntos: 'PTS', rebotes: 'REB', asistencias: 'AST', pra: 'PRA', pr: 'PR', ra: 'RA'};
     const tabla = (legs, conPartido) => el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),

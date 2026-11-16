@@ -361,3 +361,21 @@ def test_alineaciones_rotowire(tmp_path):
     assert alineaciones.estado_oficial(alineaciones.rol(d, "LeBron James", "LAL")["lesion"]) == "Out"
     with pytest.raises(alineaciones.FormatoCambiado):
         alineaciones.parsear('<div class="lineup__abbr">LAL</div>')
+
+
+def test_parley_propuesto_tarde_no_cuenta(tmp_path):
+    from psa.nba import combinadas
+    con = db.conectar(tmp_path / "t.sqlite")
+    con.execute("INSERT INTO teams VALUES (1, 'AAA', 'A'), (2, 'BBB', 'B')")
+    con.execute("INSERT INTO players VALUES (1, 'Ana Pérez', 'ana perez')")
+    con.execute("INSERT INTO games(game_id, season, season_type, game_date, start_time_utc, home_team_id, away_team_id, status) "
+                "VALUES ('g', '2026-27', 'Regular', '2026-11-15', '2026-11-16T00:00:00Z', 2, 1, 'final')")
+    con.execute("INSERT INTO nba_player_game_stats(game_id, player_id, team_id, season, game_date, minutes, points, rebounds,"
+                " assists, source_id) VALUES ('g', 1, 1, '2026-27', '2026-11-15', 30, 20, 8, 5, 0)")
+    legs = '[{"j": "Ana Pérez", "mercado": "puntos", "lado": "over", "linea": 15.5, "prob": 0.6, "cuota": 1.8}]'
+    for tam, generado in ((1, "2026-11-15T20:00:00+00:00"), (2, "2026-11-16T02:31:00+00:00")):  # Antes y después del inicio.
+        con.execute("INSERT INTO parley_proposals(game_date, matchup, size, legs_json, prob, odds, fair_odds, ev, generated_at)"
+                    " VALUES ('2026-11-15', 'AAA @ BBB', ?, ?, 0.6, 1.8, 1.67, 0.08, ?)", (tam, legs, generado))
+    r = combinadas.calificar(con)
+    assert [p["tarde"] for p in sorted(r["parleys"], key=lambda p: p["tam"])] == [False, True]
+    assert (r["decididos"], r["ganados"], r["tarde"]["decididos"]) == (1, 1, 1)
