@@ -19,7 +19,7 @@ from . import modelo
 VERSION = "nba-sesgo-0.1"
 MUESTRA_CONFIANZA = 1500  # Con esta cantidad de proyecciones calificadas, el factor se aplica a la mitad.
 TOPE_FACTOR = 0.10
-ULTIMOS_LEGS = 40
+ULTIMOS_LEGS = 400  # Los legs de los días más recientes, para verlos por partido.
 
 
 def factor_sesgo(real: float, proyectado: float, n: int) -> float:
@@ -46,8 +46,10 @@ def calificar(con) -> pd.DataFrame:
     """Una fila por jugador, partido y mercado ya jugado (con minutos), con la línea guardada si la hay."""
     pred = pd.read_sql("""SELECT p.game_id, p.game_date, p.player_id, p.market, p.projected_mean, p.dispersion,
                              p.lower_interval, p.upper_interval, p.generated_at, g.start_time_utc,
-                             s.minutes, s.points, s.rebounds, s.assists, pl.full_name AS jugador
+                             s.minutes, s.points, s.rebounds, s.assists, pl.full_name AS jugador,
+                             a.abbreviation || ' @ ' || h.abbreviation AS partido
                            FROM predictions p JOIN games g USING(game_id)
+                           LEFT JOIN teams h ON h.team_id = g.home_team_id LEFT JOIN teams a ON a.team_id = g.away_team_id
                            JOIN nba_player_game_stats s ON s.game_id = p.game_id AND s.player_id = p.player_id
                            JOIN players pl ON pl.player_id = p.player_id
                            WHERE p.scenario = 'base' AND p.projected_mean IS NOT NULL AND s.minutes > 0""", con)
@@ -114,7 +116,8 @@ def resumir(df: pd.DataFrame) -> tuple[dict, dict]:
               if len(con_mercado) else None}
     ultimos = legs.sort_values(["game_date", "p_lado"], ascending=False).head(ULTIMOS_LEGS)
     lineas["ultimos"] = [{"f": r.game_date, "j": r.jugador, "m": r.market, "l": float(r.line), "lado": r.lado,
-                          "p": round(float(r.p_lado), 3), "real": int(r.real), "ok": bool(r.acierto)}
+                          "p": round(float(r.p_lado), 3), "real": int(r.real), "ok": bool(r.acierto),
+                          "partido": r.partido or ""}
                          for r in ultimos.itertuples()]
     dias = sorted(df.game_date.unique())
     return factores, {"por_stat": por_stat, "lineas": lineas, "dias": len(dias),

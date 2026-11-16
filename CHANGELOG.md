@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.1.16 — 2026-11-15
+
+- Resultados: se ven por partido (bloques plegables con "30 de 39" acertadas) o todas de mayor a menor
+  probabilidad; la página recuerda la elección. Ahora entran todas las props calificadas, no solo 40.
+
 ## v0.1.15 — 2026-11-15
 
 - Pestaña Parley: por partido, el parley de 2 y de 3 legs más probable con líneas y precio de Stake, cada leg con

@@ -161,6 +161,10 @@ input{flex:1}
 .temporada{background:var(--bloque);border-radius:14px;padding:14px;margin-bottom:12px}
 .temporada h2{font:700 22px/1 var(--cond);margin:0 0 4px}
 td.gano{color:var(--over);font-weight:700}
+.selector{display:flex;gap:6px;margin:0 0 12px}
+.selector button{flex:1;min-height:44px;font:600 16px/1 var(--cond);border-radius:10px;border:1px solid var(--regla);background:transparent;color:var(--suave);cursor:pointer}
+.selector button[aria-pressed=true]{background:var(--bloque);color:var(--tinta);border-color:var(--tinta)}
+.marcador-aciertos{font:700 18px/1 var(--cond)}
 .combinada{border-top:1px solid var(--regla);padding:10px 0 4px}
 .parley-cabeza{display:flex;flex-wrap:wrap;gap:4px 14px;align-items:baseline;font-size:13.5px;margin-bottom:6px}
 .parley-cabeza .titulo{font:700 20px/1 var(--cond)}
@@ -434,14 +438,40 @@ const vistas = {
   },
   Resultados() {
     const r = D.resultados, ln = r && r.lineas;
-    if (!ln || !ln.n) return [el('p', {class: 'vacio'}, 'Todavía no hay props calificadas. Se califican solas cuando terminan los partidos.')];
+    if (!ln || !ln.n) return [el('p', {class: 'vacio'}, 'Aún no termina ningún partido con línea. Los resultados aparecen solos al terminar.')];
+    const CORTO = {puntos: 'PTS', rebotes: 'REB', asistencias: 'AST'};
+    const tabla = (legs, conPartido) => el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
+      ...[...legs].sort((a, b) => b.p - a.p).map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, conPartido ? `${x.partido}, ${x.f.slice(8)}/${x.f.slice(5, 7)}` : '')),
+        el('td', {}, `${CORTO[x.m] || x.m} ${x.lado} ${x.l}`), el('td', {}, pct(x.p)),
+        el('td', {class: x.ok ? 'gano' : 'perdio'}, `${x.real} ${x.ok ? '✓' : '✗'}`))));
+    const cuenta = legs => `${legs.filter(x => x.ok).length} de ${legs.length}`;
+    let modo = 'partido'; try { modo = localStorage.getItem('resultados') || 'partido'; } catch (e) {}
+    const cuerpo = el('div', {});
+    const botones = [['partido', 'Por partido'], ['prob', 'De mayor a menor']].map(([valor, texto]) => {
+      const b = el('button', {type: 'button', 'aria-pressed': String(valor === modo)}, texto);
+      b.addEventListener('click', () => { modo = valor; try { localStorage.setItem('resultados', valor); } catch (e) {} pintar(); });
+      return b;
+    });
+    function pintar() {
+      botones.forEach((b, i) => b.setAttribute('aria-pressed', String(['partido', 'prob'][i] === modo)));
+      if (modo === 'prob') { cuerpo.replaceChildren(tabla(ln.ultimos, true)); return; }
+      const grupos = new Map();
+      for (const x of ln.ultimos) { const k = `${x.f}|${x.partido}`; if (!grupos.has(k)) grupos.set(k, []); grupos.get(k).push(x); }
+      const claves = [...grupos.keys()].sort((a, b) => b.split('|')[0].localeCompare(a.split('|')[0]) || a.localeCompare(b));
+      cuerpo.replaceChildren(...claves.map((k, i) => {
+        const legs = grupos.get(k), [f, nombre] = k.split('|');
+        const d = el('details', {class: 'bloque'}, el('summary', {}, cruce(nombre || 'Sin partido'),
+          el('span', {class: 'marcador-aciertos'}, cuenta(legs)),
+          el('span', {class: 'detalle'}, `${f.slice(8)}/${f.slice(5, 7)}, ${pct(legs.filter(x => x.ok).length / legs.length)} acertadas`)), tabla(legs, false));
+        if (i === 0) d.open = true;
+        return d;
+      }));
+    }
+    pintar();
     return [
       el('p', {class: 'nota'}, `Si se dieron o no las props con línea guardada, en el lado que el modelo veía más probable. Acertó ${ln.aciertos} de ${ln.n} (${pct(ln.aciertos / ln.n)}).` +
-        (ln.n_mercado ? ` Brier modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)} (menor es mejor).` : '')),
-      el('table', {}, el('tr', {}, el('th', {}, 'Jugador'), el('th', {}, 'Prop'), el('th', {}, 'Prob.'), el('th', {}, 'Real')),
-        ...ln.ultimos.map(x => el('tr', {}, el('td', {}, x.j, el('span', {class: 'bajo'}, x.f.slice(8) + '/' + x.f.slice(5, 7))),
-          el('td', {}, `${{puntos: 'PTS', rebotes: 'REB', asistencias: 'AST'}[x.m] || x.m} ${x.lado} ${x.l}`), el('td', {}, pct(x.p)),
-          el('td', {class: x.ok ? 'gano' : 'perdio'}, `${x.real} ${x.ok ? '✓' : '✗'}`))))];
+        (ln.n_mercado ? ` Error de probabilidad (Brier, menor es mejor): modelo ${num(ln.brier_modelo_vs, 3)}, mercado ${num(ln.brier_mercado, 3)}.` : '')),
+      el('div', {class: 'selector', role: 'group', 'aria-label': 'Ordenar resultados'}, ...botones), cuerpo];
   },
   Modelo() {
     const b = D.backtest;
