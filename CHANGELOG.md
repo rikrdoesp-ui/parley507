@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.1.23 — 2026-11-15
+
+- Alineaciones de RotoWire en cada actualización (solo los partidos del calendario del día). La ficha dice
+  "Titular confirmado", "Titular esperado" o "Suplente". Si el reporte oficial no trae estado de un jugador, se usa
+  el de RotoWire (Out, OFS y suspendido = Out; GTD = Questionable; Doubt = Doubtful): el modelo reparte sus minutos y
+  Parley lo descarta. Las proyecciones lo anotan como "estado según RotoWire".
+- Foto oficial de la NBA junto al nombre (cdn.nba.com; si no carga, no deja hueco).
+
 ## v0.1.22 — 2026-11-15
 
 - En PC (1100 px o más) la página usa el ancho: hasta 1320 px, jugadores, props, parleys, resultados por partido y

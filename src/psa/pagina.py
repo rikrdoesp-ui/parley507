@@ -14,7 +14,7 @@ import pandas as pd
 
 from . import config, marca
 from . import db
-from .nba import combinadas
+from .nba import alineaciones, combinadas
 from .db import clave_nombre
 from .nba import lesiones, modelo, proyeccion, resultados
 from .nba import props as props_nba
@@ -138,9 +138,10 @@ def datos(con, fecha: str) -> dict:
         temporada = config.temporada_actual(date.fromisoformat(fecha))
         previos = {pid: g for pid, g in hist[hist.player_id.isin(pred.player_id.unique())].groupby("player_id")}
         ancho = {}
+        lineas_rw = alineaciones.del_dia(con, fecha)
         for r in pred.itertuples():
             clave = (r.player_id, r.scenario)
-            fila = ancho.setdefault(clave, {"j": r.jugador, "eq": r.equipo, "p": nombres.get(r.game_id, ""),
+            fila = ancho.setdefault(clave, {"j": r.jugador, "pid": int(r.player_id), "eq": r.equipo, "p": nombres.get(r.game_id, ""),
                                             "esc": r.scenario, "min": limpio(r.minutes, 1),
                                             "sd": limpio(r.minutes_sd, 1), "n": limpio(r.sample_games),
                                             "notas": r.notes or "", "m": {}, "props": {}})
@@ -156,7 +157,9 @@ def datos(con, fecha: str) -> dict:
         for (pid, esc), fila in ancho.items():
             if esc != "base":
                 continue
-            fila["est"] = estado.get(clave_nombre(fila["j"]), "")
+            rw = alineaciones.rol(lineas_rw, fila["j"], fila["eq"])
+            fila["est"] = estado.get(clave_nombre(fila["j"]), "") or alineaciones.estado_oficial(rw["lesion"])
+            fila["rol"], fila["alin"] = rw["rol"], rw["alineacion"]
             # Escenarios donde a este jugador le cambian los minutos (un compañero en duda no juega).
             fila["otros"] = [{"esc": e, "min": f["min"], "m": f["m"]} for (p, e), f in ancho.items()
                              if p == pid and e != "base" and abs((f["min"] or 0) - (fila["min"] or 0)) >= 0.5]

@@ -6,7 +6,7 @@ import numpy as np
 import pandas as pd
 
 from .. import config, db
-from . import lesiones, modelo, resultados
+from . import alineaciones, lesiones, modelo, resultados
 
 DIAS_PLANTILLA = 30  # Un jugador entra en la plantilla si jugó para ese equipo en los últimos 30 días.
 MINUTOS_INESTABLES = 6.0  # Desviación de minutos (L10) a partir de la cual se marca riesgo.
@@ -85,6 +85,13 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
     por_id = {int(r.player_id): r.status for r in estados.itertuples() if pd.notna(r.player_id)}
     por_clave = dict(zip(estados.clave, estados.status)) if not estados.empty else {}
     df["estado"] = [por_id.get(p) or por_clave.get(db.clave_nombre(n)) or "" for p, n in zip(df.player_id, df.jugador)]
+    # Lo que el reporte oficial no dice lo completa RotoWire (suele marcar antes las bajas de último momento).
+    lineas_rw = alineaciones.del_dia(con, fecha)
+    roles = [alineaciones.rol(lineas_rw, n, eq) for n, eq in zip(df.jugador, df.equipo)]
+    df["rol"] = [r["rol"] for r in roles]
+    df["alineacion"] = [r["alineacion"] for r in roles]
+    df["estado_rw"] = [alineaciones.estado_oficial(r["lesion"]) for r in roles]
+    df["estado"] = np.where(df.estado.eq("") & df.estado_rw.ne(""), df.estado_rw, df.estado)
     ajustes = {int(p): (m, r) for p, m, r in con.execute(
         "SELECT player_id, minutes, reason FROM minutes_overrides WHERE game_date = ?", (fecha,))}
 
@@ -125,6 +132,8 @@ def proyectar_dia(con, fecha: str) -> pd.DataFrame:
                 notas = [nota_k]
                 if r.player_id in ajustes:
                     notas.append(f"minutos a mano: {ajustes[r.player_id][1]}")
+                if r.estado_rw and r.estado == r.estado_rw:
+                    notas.append(f"estado según RotoWire: {r.estado}")
                 if (nuevas or nombre != "base") and r.player_id in medias and alfa + fraccion > 0:
                     notas.append(f"ajuste por {len(nuevas) + (nombre != 'base')} baja(s) de rotación")
                 if pd.notna(r.min_sd) and r.min_sd > MINUTOS_INESTABLES:

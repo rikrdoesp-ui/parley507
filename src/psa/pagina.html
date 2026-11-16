@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; img-src data: 'self'; manifest-src 'self'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; script-src 'unsafe-inline'; img-src data: 'self' https://cdn.nba.com; manifest-src 'self'; base-uri 'none'; form-action 'none'">
 <meta name="robots" content="noindex">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#16202C">
@@ -147,7 +147,11 @@ h2.seccion{font:700 22px/1.1 var(--cond);margin:26px 0 4px}
 /* Ficha de jugador. */
 .ficha{padding:14px 0;border-bottom:1px solid var(--regla)}
 .ficha .encabezado{display:flex;justify-content:space-between;align-items:baseline;gap:10px}
-.ficha .nombre{font:600 21px/1.1 var(--cond)}
+.ficha .nombre{font:600 21px/1.1 var(--cond);margin-right:auto}
+.ficha .encabezado{align-items:center}
+.ficha .foto{width:64px;height:47px;object-fit:cover;object-position:top;border-radius:10px;background:var(--bloque);flex:none}
+.ficha .rol{display:block;font:500 13px/1.3 var(--texto);color:var(--over);margin-top:3px}
+.ficha .rol.suplente{color:var(--suave)}
 .ficha .datos{display:flex;flex-wrap:wrap;gap:2px 14px;font-size:13px;color:var(--suave);margin-top:2px}
 @media (max-width:420px){.ficha th:nth-child(4),.ficha td:nth-child(4){display:none}}
 .estado-lesion{font:600 15px/1 var(--cond)}
@@ -292,6 +296,18 @@ function propReal(p) {
     p.segura ? el('span', {class: 'bajo'}, `Segura: ${LADO(p.segura.lado)} ${num(p.segura.linea)}, ${pct(p.segura.p)}`) : ''];
 }
 
+// Foto oficial de la NBA; si no carga, se quita sin dejar hueco.
+function foto(j) {
+  if (!j.pid) return '';
+  const img = el('img', {class: 'foto', src: `https://cdn.nba.com/headshots/nba/latest/260x190/${j.pid}.png`, alt: '',
+    loading: 'lazy', decoding: 'async', width: '64', height: '47'});
+  img.addEventListener('error', () => img.remove());
+  return img;
+}
+// Rol según RotoWire: titular (confirmado o esperado) o suplente. Las dudas ya salen como estado.
+const rolJugador = j => j.rol === 'titular' ? el('span', {class: 'rol'}, j.alin === 'confirmada' ? 'Titular confirmado' : 'Titular esperado')
+  : j.rol === 'suplente' ? el('span', {class: 'rol suplente'}, 'Suplente') : '';
+
 // Ficha de jugador con sus props.
 function fichaJugador(j) {
   const filas = MERCADOS.filter(k => j.props[k]).map(k => {
@@ -305,7 +321,8 @@ function fichaJugador(j) {
         !p.alto || vacio(p.alto.ve) ? '' : el('span', {class: 'bajo ' + signo(p.alto.ve)}, `VE ${ve(p.alto.ve)}`)));
   });
   const f = el('div', {class: 'ficha'},
-    el('div', {class: 'encabezado'}, el('span', {class: 'nombre'}, j.j), j.est ? el('span', {class: 'estado-lesion ' + j.est}, j.est) : ''),
+    el('div', {class: 'encabezado'}, foto(j), el('span', {class: 'nombre'}, j.j, rolJugador(j)),
+      j.est ? el('span', {class: 'estado-lesion ' + j.est}, j.est) : ''),
     el('div', {class: 'datos'}, el('span', {}, `${num(j.min)} min proyectados`), j.sd ? el('span', {}, `desviación ${num(j.sd)}`) : '',
       el('span', {}, `${j.n} partidos de muestra`)),
     el('table', {}, el('tr', {}, el('th', {}, ''), el('th', {}, 'L5'), el('th', {}, 'L10'), el('th', {}, 'Temp.'),

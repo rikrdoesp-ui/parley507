@@ -329,3 +329,35 @@ def test_linea_segura():
     assert over[0] < 37 < under[0] and over[1] >= 0.75 and under[1] >= 0.75
     assert modelo.p_over(37.0, 13.5, over[0] + 1) < 0.75  # Es la más exigente que pasa el 75 %.
     assert modelo.linea_segura(float("nan"), 5, "over") is None
+
+
+# --- Alineaciones (RotoWire) -----------------------------------------------------------
+
+def _rw_lista(lado, estado, titulares, dudas):
+    jug = lambda n, pos, pct, inj="": (f'<li class="lineup__player is-pct-play-{pct}" title="x"> <div class="lineup__pos" >{pos}</div> '
+                                       f'<a title="{n}" href="/p">{n}</a>' + (f' <span class="lineup__inj">{inj}</span>' if inj else "") + ' </li>')
+    return (f'<ul class="lineup__list is-{lado}"> <li class="lineup__status is-{estado}">x</li> '
+            + "".join(jug(*t) for t in titulares) + ' <li class="lineup__title is-middle">MAY NOT PLAY</li> '
+            + "".join(jug(*d) for d in dudas) + ' </ul>')
+
+
+def test_alineaciones_rotowire(tmp_path):
+    from psa.nba import alineaciones
+    html = ('<div class="lineup__abbr">LAL</div><div class="lineup__abbr">PHX</div>'
+            + _rw_lista("visit", "confirmed", [("Luka Dončić", "PG", 100)], [("LeBron James", "SF", 0, "Out")])
+            + _rw_lista("home", "expected", [("Devin Booker", "SG", 100)], [("Jalen Green", "SG", 50, "GTD")]))
+    filas = alineaciones.parsear(html)
+    assert len(filas) == 4 and filas[0]["rival"] == "PHX" and filas[2]["local"]
+    con = db.conectar(tmp_path / "t.sqlite")
+    con.execute("INSERT INTO teams VALUES (1, 'LAL', 'Lakers'), (2, 'PHX', 'Suns')")
+    con.execute("INSERT INTO games(game_id, season, season_type, game_date, home_team_id, away_team_id) "
+                "VALUES ('g', '2026-27', 'Regular', '2026-11-15', 2, 1)")
+    assert alineaciones.guardar(con, "2026-11-15", filas) == 4
+    assert alineaciones.guardar(con, "2026-11-16", filas) == 0  # Otro día: no coincide con el calendario.
+    d = alineaciones.del_dia(con, "2026-11-15")
+    assert alineaciones.rol(d, "Luka Doncic", "LAL") == {"rol": "titular", "lesion": "", "alineacion": "confirmada"}
+    assert alineaciones.rol(d, "Austin Reaves", "LAL")["rol"] == "suplente"
+    assert alineaciones.estado_oficial(alineaciones.rol(d, "Jalen Green", "PHX")["lesion"]) == "Questionable"
+    assert alineaciones.estado_oficial(alineaciones.rol(d, "LeBron James", "LAL")["lesion"]) == "Out"
+    with pytest.raises(alineaciones.FormatoCambiado):
+        alineaciones.parsear('<div class="lineup__abbr">LAL</div>')

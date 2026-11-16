@@ -11,7 +11,7 @@ from datetime import date, timedelta
 import requests
 
 from . import config, db, pagina, parley_io
-from .nba import backtest, fuente, lesiones, proyeccion, resultados
+from .nba import alineaciones, backtest, fuente, lesiones, proyeccion, resultados
 
 DIAS_REAJUSTE = 7  # El backtest (dispersión, ajuste por bajas, legs reales) se rehace con esta frecuencia.
 
@@ -58,6 +58,13 @@ def actualizar(fecha: str | None = None, con_ot: bool = True, aviso=print, publi
             db.calidad(con, "nba_injuries", fecha, "pdf_lesiones", "alta", str(error))
             resumen["avisos"].append(f"No se leyó el reporte de lesiones ({error}). Ingresa los estados a mano.")
         con.commit()
+
+        paso(60, "Alineaciones probables (RotoWire)...")
+        try:
+            resumen["alineaciones"] = alineaciones.guardar(con, fecha, alineaciones.descargar())
+        except Exception as error:  # Red caída o página cambiada: se sigue con el reporte oficial.
+            db.calidad(con, "nba_lineups", fecha, "rotowire", "media", str(error))
+            resumen["avisos"].append(f"No se leyeron las alineaciones de RotoWire ({error}).")
 
         ultimo = con.execute("SELECT MAX(created_at) FROM model_runs WHERE model_version = ?",
                              (config.MODELO_NBA,)).fetchone()[0]

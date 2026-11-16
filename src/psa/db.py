@@ -57,6 +57,11 @@ CREATE INDEX IF NOT EXISTS ix_pred_fecha ON predictions(game_date, generated_at)
 CREATE TABLE IF NOT EXISTS model_runs(
   run_id INTEGER PRIMARY KEY, sport TEXT NOT NULL, model_version TEXT NOT NULL, training_cutoff TEXT,
   params_json TEXT, metrics_json TEXT, created_at TEXT NOT NULL);
+-- Alineaciones probables de RotoWire (titulares y quién puede no jugar) del día.
+CREATE TABLE IF NOT EXISTS nba_lineups(
+  game_date TEXT NOT NULL, team TEXT NOT NULL, player_name TEXT NOT NULL, name_key TEXT NOT NULL,
+  role TEXT NOT NULL, position TEXT, pct_play INTEGER, injury TEXT, lineup_status TEXT, captured_at TEXT NOT NULL,
+  PRIMARY KEY(game_date, team, name_key));
 -- Parleys que propone la página: se guarda la última versión antes del inicio del partido, para calificarla después.
 CREATE TABLE IF NOT EXISTS parley_proposals(
   proposal_id INTEGER PRIMARY KEY, game_date TEXT NOT NULL, matchup TEXT NOT NULL, size INTEGER NOT NULL,
