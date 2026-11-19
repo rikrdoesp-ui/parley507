@@ -6,10 +6,14 @@ Solo es una propuesta: BET o PASS, monto y topes los decide /parley. Dos escenar
 
 "Mejor" es el más probable, porque el objetivo es acertar. Reglas de un leg:
 - probabilidad del mercado sin margen, movida por el modelo (props.mezclar), de P_MINIMA o más;
+- VE propio no negativo a la cuota de Stake, como exige /parley: la línea más probable suele ser la alterna con más
+  margen (cuota 1.28-1.30), y con VE negativo la escalera entera pierde valor;
 - jugador sin duda ni baja, con muestra suficiente, 20+ minutos proyectados y minutos estables;
 - el lado salió en al menos 6 de sus últimos 10 partidos a esa misma línea;
 - nada de overs de titulares con riesgo de paliza (pueden jugar menos minutos);
 - un leg por jugador.
+Se guarda y califica un solo escalón por escenario (ver `elegido`): los escalones comparten sus primeros legs, así
+que son una sola apuesta; el 18-nov-2026 un leg (Dort U13.5) tumbó los 19 a la vez.
 Partidos distintos son independientes. Dentro de un partido la probabilidad conjunta usa la correlación histórica
 entre jugadores (modelo.correlaciones); es pequeña (0,07 como mucho). En "mismo juego" Stake paga menos que el
 producto de las cuotas: la cuota mostrada es el tope y la justa es el mínimo que debería pagar.
@@ -23,6 +27,9 @@ from .. import config, db
 from . import lesiones, modelo
 
 P_MINIMA = 0.55
+VE_MINIMO = 0.0
+CUOTA_OBJETIVO = 3.0  # Escalón guardado: el más corto con esta cuota, como el ticket seguro de /parley.
+LEGS_MAXIMOS = 4
 ACIERTOS_MINIMOS = 6
 MINUTOS_MINIMOS = 20
 POR_JUEGO = 2  # Legs por partido en el escenario 2.
@@ -52,7 +59,8 @@ def candidatos(jugadores: list[dict], lineas: list[dict], ultimos: dict) -> list
         valores = ultimos.get((j["pid"], l["mercado"]), [])
         for lado in ("over", "under"):
             prob, cuota = l.get(f"P mezcla {lado}"), l.get(f"cuota {lado}")
-            if not cuota or prob is None or prob < P_MINIMA:
+            ve = l.get(f"VE {lado}")
+            if not cuota or prob is None or prob < P_MINIMA or ve is None or ve < VE_MINIMO:
                 continue
             if lado == "over" and "riesgo de paliza" in j.get("notas", ""):
                 continue
@@ -62,7 +70,7 @@ def candidatos(jugadores: list[dict], lineas: list[dict], ultimos: dict) -> list
             pm = l.get("P mercado over (sin margen)")
             salida.append({"p": j["p"], "j": j["j"], "pid": j["pid"], "eq": j["eq"], "clave": l["mercado"],
                            "mercado": NOMBRES[l["mercado"]], "lado": lado, "linea": l["línea"],
-                           "prob": round(prob, 3), "cuota": cuota, "ve": l.get(f"VE {lado}"),
+                           "prob": round(prob, 3), "cuota": cuota, "ve": ve,
                            "pm": None if pm is None else round(pm if lado == "over" else 1 - pm, 3),
                            "principal": bool(l.get("principal")), "media": l.get("media"), "min": j.get("min"),
                            "aciertos": [aciertos, len(valores)]})
@@ -134,18 +142,27 @@ def dos_por_juego(cands: list[dict], corr: dict) -> dict:
 
 def armar(jugadores: list[dict], lineas: list[dict], ultimos: dict, corr: dict) -> dict:
     cands = candidatos(jugadores, lineas, ultimos)
-    return {"uno": uno_por_juego(cands), "dos": dos_por_juego(cands, corr), "candidatos": len(cands)}
+    uno, dos = uno_por_juego(cands), dos_por_juego(cands, corr)
+    for escenario in (uno, dos):
+        e = elegido(escenario["escalera"])
+        for x in escenario["escalera"]:
+            x["elegido"] = x is e
+    return {"uno": uno, "dos": dos, "candidatos": len(cands)}
+
+
+def elegido(escalera: list[dict]) -> dict | None:
+    """El escalón más corto con cuota CUOTA_OBJETIVO o más, hasta LEGS_MAXIMOS legs y VE no negativo; si no hay, ninguno."""
+    return next((e for e in escalera if e["n"] <= LEGS_MAXIMOS and e["cuota"] >= CUOTA_OBJETIVO and e["ve"] >= 0), None)
 
 
 def propuestas(parleys: dict) -> list[dict]:
-    """Cada escalón de las dos escaleras como un parley para guardar: tipo, legs y números."""
+    """El escalón elegido de cada escenario como un parley para guardar: tipo, legs y números."""
     salida = []
     uno, dos = parleys["uno"], parleys["dos"]
-    for e in uno["escalera"]:
+    if e := elegido(uno["escalera"]):
         salida.append({"tipo": UNO, "legs": uno["legs"][:e["n"]], **e})
-    legs = []
-    for g, e in zip(dos["grupos"], dos["escalera"]):
-        legs = legs + g["legs"]
+    if e := elegido(dos["escalera"]):
+        legs = [l for g in dos["grupos"][:e["partidos"]] for l in g["legs"]]
         salida.append({"tipo": DOS, "legs": legs, **e})
     return salida
 
@@ -158,11 +175,14 @@ def guardar(con, fecha: str, parleys: dict, inicios: dict) -> int:
     ahora = db.ahora_utc()
     # Un partido sin hora (NaT) no cuenta como "por empezar".
     sin_empezar = lambda legs: all(isinstance(inicios.get(l.get("p")), str) and _utc(inicios[l["p"]]) > ahora for l in legs)
-    nuevos = [p for p in propuestas(parleys) if sin_empezar(p["legs"])]
+    guardados = con.execute("SELECT matchup, size, legs_json FROM parley_proposals WHERE game_date = ?"
+                            " AND matchup IN (?, ?)", (fecha, UNO, DOS)).fetchall()
+    # Un escenario con su escalón ya en juego no recibe otro: serían dos apuestas sobre los mismos legs.
+    en_juego = {tipo for tipo, _, legs_json in guardados if not sin_empezar(json.loads(legs_json))}
+    nuevos = [p for p in propuestas(parleys) if p["tipo"] not in en_juego and sin_empezar(p["legs"])]
     # Los escalones del día que aún no empiezan se rehacen enteros: si ahora hay menos partidos elegibles, el
     # escalón más largo de antes no debe quedar guardado con legs que ya no se proponen.
-    for tipo, tam, legs_json in con.execute("SELECT matchup, size, legs_json FROM parley_proposals WHERE game_date = ?"
-                                            " AND matchup IN (?, ?)", (fecha, UNO, DOS)).fetchall():
+    for tipo, tam, legs_json in guardados:
         if sin_empezar(json.loads(legs_json)):
             con.execute("DELETE FROM parley_proposals WHERE game_date = ? AND matchup = ? AND size = ?", (fecha, tipo, tam))
     con.executemany("""INSERT OR REPLACE INTO parley_proposals(game_date, matchup, size, legs_json, prob, odds, fair_odds,

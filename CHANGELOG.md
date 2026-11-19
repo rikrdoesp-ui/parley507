@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.1.29 — 2026-11-19
+
+- Parley: un leg necesita además VE no negativo a la cuota de Stake. El 18-nov los 19 escalones tenían VE de −2 % a
+  −35 %: el leg más probable suele ser la línea alterna con más margen (cuota 1.28-1.30).
+- Parley: de cada escenario se guarda y califica un solo escalón (★ en la escalera), el más corto con cuota x3 o más
+  y hasta 4 legs. Los escalones comparten sus primeros legs; el 18-nov Dort U13.5 → 16 tumbó los 19 a la vez.
+
 ## v0.1.28 — 2026-11-16
 
 - Líneas alternas de Stake (la flecha junto a la línea): `/parley` las lee con `scripts/escaner_lineas.js` y la app

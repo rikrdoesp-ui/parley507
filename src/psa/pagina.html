@@ -491,7 +491,7 @@ const vistas = {
   },
   Parley() {
     const P = D.parleys || {}, uno = P.uno || {legs: [], escalera: []}, dos = P.dos || {grupos: [], escalera: []};
-    if (!uno.legs.length) return [el('p', {class: 'vacio'}, 'Ningún leg pasa hoy los filtros. Aparecen cuando hay líneas de Stake con 55 % o más.')];
+    if (!uno.legs.length) return [el('p', {class: 'vacio'}, 'Ningún leg pasa hoy los filtros. Aparecen cuando hay líneas de Stake con 55 % o más y VE no negativo.')];
     // Un leg: quién, qué línea (ajustada si no es la que Stake muestra por defecto), probabilidad y cuota.
     const leg = (l, n) => el('div', {class: 'leg ' + l.lado},
       el('div', {class: 'leg-linea'}, el('strong', {}, n ? `${n}. ${l.j}` : l.j),
@@ -500,11 +500,11 @@ const vistas = {
         (l.principal ? '' : ' Línea ajustada con la flecha de Stake.')));
     const escalera = (filas, primera, etiqueta) => el('table', {},
       el('tr', {}, el('th', {}, primera), el('th', {}, 'Prob.'), el('th', {}, 'Cuota'), el('th', {}, 'Justa')),
-      ...filas.map(e => el('tr', {}, el('td', {}, etiqueta(e)), el('td', {class: 'proy'}, pct(e.prob)),
+      ...filas.map(e => el('tr', {}, el('td', {}, etiqueta(e) + (e.elegido ? ' ★' : '')), el('td', {class: 'proy'}, pct(e.prob)),
         el('td', {}, num(e.cuota, 2)), el('td', {}, num(e.justa, 2)))));
-    const out = [el('p', {class: 'nota'}, `Armados con ${D.lineas_stake || 0} líneas de Stake, alternas incluidas. Cada leg que agregas baja la probabilidad: la escalera muestra cuánto.`),
+    const out = [el('p', {class: 'nota'}, `Armados con ${D.lineas_stake || 0} líneas de Stake, alternas incluidas. Cada leg que agregas baja la probabilidad: la escalera muestra cuánto. ★ es el único escalón que se guarda y califica: el más corto con cuota x3 o más, hasta 4 legs y VE no negativo (los escalones comparten legs, son una sola apuesta).`),
       el('details', {class: 'escenarios'}, el('summary', {}, 'Cómo se eligen'),
-        el('p', {class: 'nota'}, 'El leg más probable de cada jugador entre todas sus líneas de Stake: jugador confirmado, 20+ minutos estables, cumplió 6 de sus últimos 10 a esa línea, 55 % o más y un leg por jugador. La probabilidad parte del mercado sin margen y el modelo la mueve como mucho 4 puntos. Justa es lo mínimo que debería pagar; Stake siempre paga menos por su margen. Apostar o no, y cuánto, lo decide /parley.')),
+        el('p', {class: 'nota'}, 'El leg más probable de cada jugador entre todas sus líneas de Stake: jugador confirmado, 20+ minutos estables, cumplió 6 de sus últimos 10 a esa línea, 55 % o más, VE no negativo a la cuota de Stake y un leg por jugador. La probabilidad parte del mercado sin margen y el modelo la mueve como mucho 4 puntos. Justa es lo mínimo que debería pagar; Stake siempre paga menos por su margen. Apostar o no, y cuánto, lo decide /parley.')),
       el('div', {class: 'rejilla'},
         el('section', {}, el('h2', {class: 'seccion'}, '1 prop por juego'),
           el('p', {class: 'nota'}, 'El mejor prop de cada partido, del más al menos probable. El parley de N legs son los primeros N.'),

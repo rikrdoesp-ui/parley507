@@ -290,14 +290,14 @@ def _dia():
     """Dos partidos: en AAA @ BBB, A (con una línea alterna más fácil) y B; en CCC @ DDD solo C pasa las reglas."""
     jugadores, lineas, ultimos = [], [], {}
 
-    def jugador(pid, nombre, partido, p, linea=10.5, est="", notas="", minutos=30, casa="Stake", aciertos=7):
+    def jugador(pid, nombre, partido, p, linea=10.5, est="", notas="", minutos=30, casa="Stake", aciertos=7, ve=0.02):
         if not any(j["pid"] == pid for j in jugadores):
             jugadores.append({"j": nombre, "pid": pid, "eq": partido[:3], "p": partido, "esc": "base", "min": minutos,
                               "est": est, "notas": notas})
             ultimos[(pid, "puntos")] = [12] * aciertos + [9] * (10 - aciertos)  # Over 10.5: `aciertos`; over 8.5: 10.
         lineas.append({"player_id": pid, "jugador": nombre, "mercado": "puntos", "línea": linea, "casa": casa,
                        "P mezcla over": p, "P mezcla under": 1 - p, "cuota over": 1.8, "cuota under": 2.0,
-                       "VE over": -0.02, "VE under": -0.1, "P mercado over (sin margen)": p - 0.02, "media": 12.0,
+                       "VE over": ve, "VE under": -0.1, "P mercado over (sin margen)": p - 0.02, "media": 12.0,
                        "principal": linea == 10.5})
 
     jugador(1, "A", "AAA @ BBB", 0.70)
@@ -310,6 +310,7 @@ def _dia():
     jugador(7, "Consenso", "CCC @ DDD", 0.90, casa="Consenso BettingPros")
     jugador(8, "Banca", "CCC @ DDD", 0.90, minutos=12)
     jugador(9, "Bajo", "CCC @ DDD", 0.50)
+    jugador(10, "Caro", "CCC @ DDD", 0.90, ve=-0.05)  # Muy probable pero con VE negativo: fuera.
     return jugadores, lineas, ultimos
 
 
@@ -319,7 +320,8 @@ def test_parley_uno_por_juego_y_dos_por_juego():
     uno, dos = p["uno"], p["dos"]
     assert [(l["j"], l["linea"]) for l in uno["legs"]] == [("A", 8.5), ("C", 10.5)]  # El mejor de cada partido.
     assert not uno["legs"][0]["principal"] and uno["legs"][0]["aciertos"] == [10, 10]
-    assert uno["escalera"] == [{"n": 2, "prob": 0.48, "cuota": 3.24, "justa": 2.08, "ve": pytest.approx(0.555, abs=1e-3)}]
+    assert uno["escalera"] == [{"n": 2, "prob": 0.48, "cuota": 3.24, "justa": 2.08, "ve": pytest.approx(0.555, abs=1e-3),
+                                "elegido": True}]
     assert [g["partido"] for g in dos["grupos"]] == ["AAA @ BBB"]  # CCC @ DDD no junta 2 legs.
     assert [l["j"] for l in dos["grupos"][0]["legs"]] == ["A", "B"] and dos["grupos"][0]["prob"] == pytest.approx(0.544)
     assert dos["escalera"][0]["partidos"] == 1
@@ -425,3 +427,21 @@ def test_parley_propuesto_tarde_no_cuenta(tmp_path):
     r = combinadas.calificar(con)
     assert [p["tarde"] for p in sorted(r["parleys"], key=lambda p: p["tam"])] == [False, True]
     assert (r["decididos"], r["ganados"], r["tarde"]["decididos"]) == (1, 1, 1)
+
+
+def test_se_guarda_un_solo_escalon_por_escenario():
+    from psa.nba import combinadas
+    e = lambda n, cuota, ve=0.05: {"n": n, "cuota": cuota, "ve": ve}
+    assert combinadas.elegido([e(2, 1.66), e(3, 2.9), e(4, 3.5), e(5, 4.5)]) == e(4, 3.5)  # El más corto con x3.
+    assert combinadas.elegido([e(2, 1.66), e(5, 4.5)]) is None  # x3 solo con más de 4 legs: ninguno.
+    assert combinadas.elegido([e(2, 3.2, ve=-0.01)]) is None
+
+
+def test_escenario_en_juego_no_recibe_otro_escalon(tmp_path):
+    from psa.nba import combinadas
+    con = db.conectar(tmp_path / "t.sqlite")
+    parleys = combinadas.armar(*_dia(), {})
+    assert combinadas.guardar(con, "2026-11-14", parleys, {"AAA @ BBB": "2099-01-01T00:00:00Z"}) == 1
+    # Ya empezó AAA @ BBB: el escalón guardado queda y no entra otro del mismo escenario.
+    assert combinadas.guardar(con, "2026-11-14", parleys, {"AAA @ BBB": "2000-01-01T00:00:00Z"}) == 0
+    assert con.execute("SELECT COUNT(*) FROM parley_proposals").fetchone()[0] == 1

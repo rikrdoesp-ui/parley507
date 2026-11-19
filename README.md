@@ -90,9 +90,12 @@ Dato faltante = vacío, nunca cero. Cada fila guarda su fuente y hora de captura
 Parleys del día (pestaña Parley): con todas las líneas de Stake, alternas incluidas (las lee `/parley` con
 `scripts/escaner_lineas.js` y quedan en `CODE/stake/lineas/FECHA.txt`), la página arma dos escenarios. **1 prop por
 juego:** el leg más probable de cada partido y la escalera de 2 legs en adelante. **2 props por juego:** el mejor
-par de cada partido y la escalera por número de partidos. Un leg entra con 55 % o más, jugador confirmado, 20+
-minutos estables y 6 de 10 a esa línea. Cada escalón se guarda antes de que empiece su primer partido y se califica
-solo; Resultados muestra el acierto por escenario y si cada tramo de probabilidad cumple lo que dice.
+par de cada partido y la escalera por número de partidos. Un leg entra con 55 % o más, VE no negativo a la cuota de
+Stake, jugador confirmado, 20+ minutos estables y 6 de 10 a esa línea. De cada escenario se guarda y califica un solo
+escalón (★): el más corto con cuota x3 o más y hasta 4 legs, como el ticket seguro de `/parley`; los escalones
+comparten sus primeros legs y contarlos todos multiplicaba un mismo fallo (18-nov-2026: Dort U13.5 tumbó los 19). Se
+guarda antes de que empiece su primer partido; Resultados muestra el acierto por escenario y si cada tramo de
+probabilidad cumple lo que dice.
 
 Spread y palizas: cada partido muestra un spread estimado propio y los titulares de partidos con spread de 12 o más
 llevan un aviso de riesgo de paliza. No se les quitan minutos: se probó en el backtest y no mejoraba.
